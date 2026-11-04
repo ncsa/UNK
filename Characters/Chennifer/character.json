@@ -1,0 +1,130 @@
+{
+  "name": "Chennifer",
+  "slug": "chennifer",
+  "summary": "Chennifer is sweet, cheerful, and full of chaotic energy. Usually very nice and friendly, but rarely stays still for long. Frequently spotted running down hallways at suspicious speeds for absolutely no reason.",
+  "source": {
+    "text": "Chennifer.txt",
+    "image": "Chennifer.jpeg",
+    "health": 150,
+    "strength": 120,
+    "defense": 150
+  },
+  "stats": {
+    "health": 150,
+    "punch_damage": 6,
+    "kick_damage": 8,
+    "special_damage": 17,
+    "block": 0.75,
+    "walk_speed": 2.4,
+    "jump_power": 7.0
+  },
+  "ai": {
+    "punch": 0.7,
+    "kick": 0.3,
+    "jump": 0.8,
+    "block": 0.2,
+    "special": 0.9,
+    "aggression": 0.8,
+    "mobility": 1.0
+  },
+  "expressions": {
+    "idle": "Wide cheerful smile, blinking rapidly while bouncing",
+    "attack": "Determined and hyperactive grin",
+    "hit": "Surprised pouting gasp",
+    "victory": "Beaming joyful smile with starry eyes"
+  },
+  "victory_pose": "Chennifer jumps up and down with intense excitement before dashing off-screen at full speed.",
+  "taunts": [
+    "Catch me if you can!",
+    "Did you see that cool cat over there?",
+    "Why are we standing still?!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Hallway Zoomies",
+      "description": "Suddenly sprints across the battlefield at ridiculous speed, knocking over everyone in her path. Nobody knows where she’s going, including herself.",
+      "input": [
+        "S",
+        "S",
+        "D",
+        "LMB"
+      ],
+      "effect": "melee",
+      "shout": null,
+      "pose_frames": [
+        "Low sprint windup leaning forward heavily",
+        "Full speed horizontal blur dash"
+      ],
+      "height_ratio": 0.65,
+      "prop": null,
+      "prop_size": 0.5
+    },
+    {
+      "id": "special2",
+      "name": "Tiny Fury",
+      "description": "After too much nonsense, unleashes a rapid series of tiny punches while shouting “BUT WHYYYY?” Damage increases with frustration.",
+      "input": [
+        "D",
+        "D",
+        "D",
+        "LMB"
+      ],
+      "effect": "melee",
+      "shout": "BUT WHYYYY?",
+      "pose_frames": [
+        "Pouting squint with fists pulled back tight",
+        "Flurry of rapid wild punches extending forward"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 0.5
+    },
+    {
+      "id": "special3",
+      "name": "Cat Mode",
+      "description": "Abruptly abandons the fight to chase something interesting, eat a snack, or pet a cat. Restores health but completely forgets what she was doing.",
+      "input": [
+        "W",
+        "S",
+        "W",
+        "S",
+        "LMB"
+      ],
+      "effect": "area",
+      "shout": null,
+      "pose_frames": [
+        "Dropping to knees excitedly looking down",
+        "Happily petting a small creature while sitting back"
+      ],
+      "height_ratio": 0.5,
+      "prop": "A small cute cat sitting happily",
+      "prop_size": 0.3
+    },
+    {
+      "id": "special4",
+      "name": "UNSTOPPABLE ZOOMIES",
+      "description": "Runs through every hallway on the map at maximum speed, creating a miniature tornado that sends enemies, furniture, and loose paperwork flying.",
+      "input": [
+        "S",
+        "S",
+        "S",
+        "S",
+        "D",
+        "D",
+        "LMB"
+      ],
+      "effect": "area",
+      "shout": null,
+      "pose_frames": [
+        "Crouched intense charge up with dust kicking up",
+        "Spinning wild run pose generating a whirlwind around her"
+      ],
+      "height_ratio": 0.8,
+      "prop": "Swirling vortex of wind filled with scattered loose papers and chairs",
+      "prop_size": 1.5
+    }
+  ],
+  "warnings": [],
+  "proportions": "realistic adult proportions like the other Street Fighter II fighters: the head, including the hair, is only about one eighth of the total standing height; keep her round glasses and gray shoulder-length hair, but the hair lies fairly flat, not big or voluminous; long torso and long legs; same outfit as the reference: rust-orange cardigan, green dress, black tights and black knee-high boots; no chibi or caricature look"
+}

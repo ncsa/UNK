@@ -1,0 +1,40 @@
+# Production overlay: Traefik terminates HTTPS (Let's Encrypt) in front of the game.
+#
+#   UNK_HOSTNAME=unk.ncsa.illinois.edu ACME_EMAIL=you@illinois.edu \
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+#
+# See DEPLOY.md. Hostname and email are required — no default on purpose.
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL:?set ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+  unk:
+    ports: !reset []            # not published; reachable only through Traefik
+    expose:
+      - "8000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.unk.rule=Host(`${UNK_HOSTNAME:?set UNK_HOSTNAME}`)
+      - traefik.http.routers.unk.entrypoints=websecure
+      - traefik.http.routers.unk.tls.certresolver=le
+      - traefik.http.services.unk.loadbalancer.server.port=8000
+
+volumes:
+  letsencrypt:

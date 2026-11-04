@@ -1,0 +1,11 @@
+gemini_key.txt
+elevenlabs_key.txt
+users.csv
+Assets
+Images
+Misc
+data
+build
+.claude
+__pycache__
+.DS_Store

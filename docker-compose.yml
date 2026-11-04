@@ -1,0 +1,18 @@
+# Run UNK Fighter with Docker Compose.
+#
+#   docker compose up --build          # http://localhost:8000
+#
+# users.csv (logins) and data/ (high scores) are mounted, not baked in. users.csv must
+# exist before the first `up`: if it doesn't, Docker creates a directory in its place.
+# Plain HTTP is fine on localhost; for a server use docker-compose.https.yml (DEPLOY.md),
+# since basic auth sends passwords with every request.
+services:
+  unk:
+    build: .
+    image: unk-fighter:latest
+    ports:
+      - "${UNK_PORT:-8000}:8000"
+    volumes:
+      - ./users.csv:/app/users.csv:ro
+      - ./data:/app/data
+    restart: unless-stopped

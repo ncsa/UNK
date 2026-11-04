@@ -1,0 +1,46 @@
+{
+  "name": "RS",
+  "slug": "rs",
+  "summary": "a determined street fighter",
+  "source": {
+    "text": null,
+    "text_hash": null,
+    "parsed_text": null,
+    "image": "RS.jpeg",
+    "health": 100,
+    "strength": 100,
+    "defense": 100
+  },
+  "stats": {
+    "health": 100,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 14,
+    "block": 0.5,
+    "walk_speed": 2.0,
+    "jump_power": 6.25
+  },
+  "ai": {
+    "punch": 0.5,
+    "kick": 0.5,
+    "jump": 0.4,
+    "block": 0.4,
+    "special": 0.3,
+    "aggression": 0.6,
+    "mobility": 0.5
+  },
+  "expressions": {
+    "idle": "focused",
+    "attack": "fierce",
+    "hit": "pained",
+    "victory": "triumphant"
+  },
+  "victory_pose": "arms raised in triumph",
+  "taunts": [],
+  "specials": [],
+  "warnings": [
+    "draft: RS.txt not filled in yet, so default stats and no special moves",
+    "no special moves found"
+  ],
+  "draft": true
+}

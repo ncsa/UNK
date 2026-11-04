@@ -1,0 +1,98 @@
+{
+  "block": {
+    "files": [
+      "block.wav"
+    ],
+    "sources": [
+      "MiscAssets/Block.mp3"
+    ]
+  },
+  "dizzy": {
+    "files": [
+      "dizzy.wav"
+    ],
+    "sources": [
+      "Assets/Dizzy.mp3"
+    ]
+  },
+  "hit_heavy": {
+    "files": [
+      "hit_heavy.wav"
+    ],
+    "sources": [
+      "Assets/Heavy.mp3"
+    ]
+  },
+  "hit_light": {
+    "files": [
+      "hit_light.wav"
+    ],
+    "sources": [
+      "MiscAssets/Punch.mp3"
+    ]
+  },
+  "kick_whoosh": {
+    "files": [
+      "kick_whoosh.wav",
+      "kick_whoosh-2.wav",
+      "kick_whoosh-3.wav"
+    ],
+    "sources": [
+      "Assets/KickWoosh1.mp3",
+      "Assets/KickWoosh2.mp3",
+      "Assets/KickWoosh3.mp3"
+    ]
+  },
+  "ko": {
+    "files": [
+      "ko.wav"
+    ],
+    "sources": [
+      "Assets/KO.mp3"
+    ]
+  },
+  "land": {
+    "files": [
+      "land.wav"
+    ],
+    "sources": [
+      "Assets/Landing.mp3"
+    ]
+  },
+  "punch_whoosh": {
+    "files": [
+      "punch_whoosh.wav",
+      "punch_whoosh-2.wav",
+      "punch_whoosh-3.wav"
+    ],
+    "sources": [
+      "Assets/PunchWoosh3.mp3",
+      "Assets/PunchWoosh1.mp3",
+      "Assets/PunchWoosh2.mp3"
+    ]
+  },
+  "ready": {
+    "files": [
+      "ready.wav"
+    ],
+    "sources": [
+      "Assets/Ready2.mp3"
+    ]
+  },
+  "special": {
+    "files": [
+      "special.wav"
+    ],
+    "sources": [
+      "Assets/Special1.mp3"
+    ]
+  },
+  "throw": {
+    "files": [
+      "throw.wav"
+    ],
+    "sources": [
+      "Assets/Throw.mp3"
+    ]
+  }
+}

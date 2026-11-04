@@ -1,0 +1,23 @@
+{
+ "block_0": "ce0cd9042e8d",
+ "crouch_0": "339b0f8cd54b",
+ "hit_0": "c46299ab14a2",
+ "idle_0": "9045a1358363",
+ "idle_1": "7d4e1dde6d1a",
+ "jump_0": "4159ad040355",
+ "kick_0": "b01068b091b7",
+ "kick_1": "93407c79cec3",
+ "ko_0": "2a19485234a6",
+ "portrait": "b5348d8eccab",
+ "prop_special1": "5a59961d83a2",
+ "prop_special2": "c98f3f6a0785",
+ "punch_0": "fdbc20ede919",
+ "punch_1": "aa251e01d177",
+ "special1_0": "2008a0658f42",
+ "special1_1": "2d47a4a56d70",
+ "special2_0": "fa579e3e22d1",
+ "special2_1": "f34c5874e631",
+ "victory_0": "13dfb934eba6",
+ "walk_0": "de8281521cff",
+ "walk_1": "f1f9b0f5cae5"
+}

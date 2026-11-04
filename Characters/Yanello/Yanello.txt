@@ -1,0 +1,17 @@
+# Profile for Yanello. Fill this in, then run add_character.py again: only what changed is
+# rebuilt. Lines starting with # are ignored. Replace the line below with a sentence or two on
+# personality and fighting style, e.g. "Grumpy and rude. Mostly punches, jumps rarely."
+Yanello is ...
+
+# Health, strength and defense are worked out from the description above (sharing 300 points,
+# so nobody is simply better). To set any yourself, remove the # from its line and change it:
+# Health: 100
+# Strength: 100
+# Defense: 100
+
+Special moves:
+# Up to 4, one per line starting with "- ". Each needs only a name and what happens; a button
+# sequence that suits the move is picked for you. To choose your own, end the line with one:
+# directions are relative to the opponent (D toward them, A away, W up, S down), then punch
+# (left click or J) or kick (right click or K). e.g.
+# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!". Triggered with S, D, punch.

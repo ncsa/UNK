@@ -1,0 +1,4 @@
+# What server.py needs to serve the game (the Docker image installs only these).
+fastapi
+uvicorn>=0.29        # timeout_graceful_shutdown
+pillow

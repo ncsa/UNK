@@ -1,0 +1,41 @@
+# Secrets: never bake into the image (users.csv is mounted at runtime; the server
+# needs no API keys).
+**/*_key.txt
+users.csv
+setup.sh
+
+# High scores live in data/, which is mounted so they survive rebuilds.
+data/
+
+# Generation caches the server doesn't read: raw Gemini frames (the built sheets in
+# build/characters are what's served), raw ElevenLabs audio, audition reels.
+Characters/*/frames/
+Sounds/raw/
+Sounds/audition/
+# Arena copies are rebuilt on demand from Arenas/ and Characters/*/Arena_*.
+build/arenas/
+
+# Working material the game doesn't serve.
+Images/
+Misc/
+Prompts.txt
+SplastScreen.jpeg
+
+# Asset tools run on your machine, not in the container.
+add_character.py
+make_sounds.py
+requirements.txt
+
+# Python / venv / build cruft.
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# VCS, OS, editor, Claude.
+.git/
+.gitignore
+.DS_Store
+**/.DS_Store
+.claude/
+*.log

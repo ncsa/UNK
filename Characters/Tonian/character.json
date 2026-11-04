@@ -1,0 +1,85 @@
+{
+  "name": "Tonian",
+  "slug": "tonian",
+  "summary": "Arrogant, sassy, and mischievous fighter who mixes punches and kicks while jumping occasionally.",
+  "source": {
+    "text": "Tonian.txt",
+    "image": "Tonian.jpeg",
+    "health": 100,
+    "strength": 100,
+    "defense": 100
+  },
+  "stats": {
+    "health": 100,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 14,
+    "block": 0.5,
+    "walk_speed": 2.08,
+    "jump_power": 6.4
+  },
+  "ai": {
+    "punch": 0.6,
+    "kick": 0.6,
+    "jump": 0.4,
+    "block": 0.3,
+    "special": 0.7,
+    "aggression": 0.7,
+    "mobility": 0.6
+  },
+  "expressions": {
+    "idle": "Smirk with a tilted head",
+    "attack": "Sassy grin",
+    "hit": "Offended frown",
+    "victory": "Arrogant wink and sneer"
+  },
+  "victory_pose": "Tonian puts his hands on his hips, tilts his head back, and laughs mischievously at his defeated opponent.",
+  "taunts": [
+    "Is that really the best you've got?",
+    "Why are you even trying?",
+    "Oh, sweetie, no."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Giant denied stamp",
+      "description": "Brings out an enormous DENIED stamp and stomps the other character with it.",
+      "input": [
+        "W",
+        "W",
+        "LMB"
+      ],
+      "effect": "stun",
+      "shout": "DENIED!!",
+      "pose_frames": [
+        "Leaping up while raising a massive rubber stamp overhead",
+        "Slamming the giant stamp down forcefully onto the opponent"
+      ],
+      "height_ratio": 1.2,
+      "prop": "A massive red rubber stamp with 'DENIED' engraved on the bottom",
+      "prop_size": 0.8
+    },
+    {
+      "id": "special2",
+      "name": "You are mean to me twirl",
+      "description": "Spins with fists out causing multiple punches to hit nearby enemies.",
+      "input": [
+        "A",
+        "D",
+        "A",
+        "D",
+        "LMB"
+      ],
+      "effect": "area",
+      "shout": "why are you so mean to me!",
+      "pose_frames": [
+        "Crouching low with arms wound back to gather momentum",
+        "Rapidly spinning on the spot with fists stretched outward"
+      ],
+      "height_ratio": 0.85,
+      "prop": null,
+      "prop_size": 0.5
+    }
+  ],
+  "warnings": []
+}

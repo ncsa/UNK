@@ -1,0 +1,86 @@
+{
+  "name": "The Koop",
+  "slug": "thekoop",
+  "summary": "The Koop is rude and grumpy. He does mostly punches and jumps rarely.",
+  "source": {
+    "text": "TheKoop.txt",
+    "image": "TheKoop.jpeg",
+    "health": 150,
+    "strength": 150,
+    "defense": 150
+  },
+  "stats": {
+    "health": 150,
+    "punch_damage": 8,
+    "kick_damage": 10,
+    "special_damage": 21,
+    "block": 0.75,
+    "walk_speed": 1.84,
+    "jump_power": 5.95
+  },
+  "ai": {
+    "punch": 0.8,
+    "kick": 0.2,
+    "jump": 0.1,
+    "block": 0.5,
+    "special": 0.6,
+    "aggression": 0.7,
+    "mobility": 0.3
+  },
+  "expressions": {
+    "idle": "Scowling bitterly",
+    "attack": "Furious grimace",
+    "hit": "Glares with rage",
+    "victory": "Smug sneer"
+  },
+  "victory_pose": "The Koop crosses his arms and sneers disdainfully at his fallen opponent.",
+  "taunts": [
+    "Is that all you got?",
+    "Get out of my face.",
+    "Amateur hour."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Server Box Throw",
+      "description": "Pulls out a giant server box and throws it at you.",
+      "input": [
+        "S",
+        "S",
+        "LMB"
+      ],
+      "effect": "projectile",
+      "shout": null,
+      "pose_frames": [
+        "Leaning back pulling a heavy server box over his shoulder",
+        "Lunging forward hurling the server box"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A massive metallic computer server box with flashing LED lights",
+      "prop_size": 0.8
+    },
+    {
+      "id": "special2",
+      "name": "Access Revocation",
+      "description": "Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion.",
+      "input": [
+        "S",
+        "D",
+        "LMB"
+      ],
+      "effect": "stun",
+      "shout": null,
+      "pose_frames": [
+        "Crouched down furiously typing on a laptop",
+        "Standing up slamming the laptop shut"
+      ],
+      "height_ratio": 0.65,
+      "prop": "A modern sleek laptop",
+      "prop_size": 0.2
+    }
+  ],
+  "warnings": [
+    "Special move 'Access Revocation' had no input sequence specified.",
+    "special2 'Access Revocation' had no usable input; assigned S, D, LMB"
+  ]
+}

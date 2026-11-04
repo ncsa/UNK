@@ -1,0 +1,6 @@
+# Everything for development: the game server plus the asset tools
+# (add_character.py, make_sounds.py).
+-r requirements-server.txt
+google-genai
+numpy
+scipy
