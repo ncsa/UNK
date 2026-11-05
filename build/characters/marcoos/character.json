@@ -64,7 +64,7 @@
         "LMB"
       ],
       "input_source": "suggested",
-      "effect": "melee",
+      "effect": "uppercut",
       "shout": "Slice!",
       "pose_frames": [
         "crouches low, fists pulled back, glowing energy gathering at his knuckles",
@@ -72,7 +72,28 @@
       ],
       "height_ratio": 1.2,
       "prop": null,
-      "prop_size": 0.5
+      "prop_size": 0.5,
+      "extra_props": {
+        "claws": {
+          "description": "three long shiny silver metal claws side by side, joined at the base, pointing straight up, like a comic-book superhero's claws",
+          "size": 0.45,
+          "attach": [
+            [
+              32,
+              -84,
+              0.45
+            ],
+            [
+              29,
+              -109,
+              0.4
+            ]
+          ],
+          "fist": 9,
+          "length": 26,
+          "blade": 3
+        }
+      }
     },
     {
       "id": "special2",
@@ -85,7 +106,7 @@
         "RMB"
       ],
       "input_source": "suggested",
-      "effect": "stun",
+      "effect": "teleport",
       "shout": null,
       "pose_frames": [
         "crosses arms as blue quantum energy begins to crackle around his body",

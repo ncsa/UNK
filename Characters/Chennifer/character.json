@@ -52,7 +52,7 @@
         "D",
         "LMB"
       ],
-      "effect": "melee",
+      "effect": "dash",
       "shout": null,
       "pose_frames": [
         "Low sprint windup leaning forward heavily",
@@ -93,7 +93,7 @@
         "S",
         "LMB"
       ],
-      "effect": "area",
+      "effect": "cat",
       "shout": null,
       "pose_frames": [
         "Dropping to knees excitedly looking down",
@@ -116,7 +116,7 @@
         "D",
         "LMB"
       ],
-      "effect": "area",
+      "effect": "tornado",
       "shout": null,
       "pose_frames": [
         "Crouched intense charge up with dust kicking up",

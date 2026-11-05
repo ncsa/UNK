@@ -63,7 +63,7 @@
         "RMB"
       ],
       "input_source": "suggested",
-      "effect": "stun",
+      "effect": "bind",
       "shout": "Hold still!",
       "pose_frames": [
         "Stooping down while pulling a strip of duct tape",
@@ -86,7 +86,7 @@
         "LMB"
       ],
       "input_source": "suggested",
-      "effect": "area",
+      "effect": "charge",
       "shout": "Out of the way!",
       "pose_frames": [
         "Leaping backward into the driver's side door of a white van",

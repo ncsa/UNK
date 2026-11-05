@@ -544,32 +544,55 @@
       49,
       112
      ],
-     "hit": null
+     "hit": null,
+     "top": [
+      2,
+      -112
+     ],
+     "front": [
+      41,
+      -83
+     ]
     },
     {
      "x": 686,
      "y": 113,
-     "w": 62,
-     "h": 112,
-     "ax": 28,
-     "ay": 112,
+     "w": 75,
+     "h": 116,
+     "ax": 26,
+     "ay": 116,
      "hurt": [
-      -21,
-      -112,
-      43,
-      112
+      -26,
+      -116,
+      52,
+      116
      ],
      "hit": [
       25,
-      -109,
-      9,
-      106
+      -116,
+      24,
+      113
+     ],
+     "top": [
+      36,
+      -116
+     ],
+     "front": [
+      48,
+      -95
+     ],
+     "edge": [
+      -93,
+      -90,
+      48
      ]
     }
    ]
   }
  },
  "props": {
-  "special1": "props/special1.png"
+  "special1": "props/special1.png",
+  "special1_car": "props/special1_car.png",
+  "special1_plane": "props/special1_plane.png"
  }
 }

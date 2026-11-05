@@ -63,7 +63,7 @@
         "LMB"
       ],
       "input_source": "suggested",
-      "effect": "stun",
+      "effect": "slideshow",
       "shout": "As you can see on chart B!",
       "pose_frames": [
         "Unfolds a massive stack of blueprints and papers forward",
@@ -83,7 +83,7 @@
         "RMB"
       ],
       "input_source": "suggested",
-      "effect": "area",
+      "effect": "rain",
       "shout": "Careful, it's scalding!",
       "pose_frames": [
         "Leans back taking a quick, refined sip from a porcelain cup",

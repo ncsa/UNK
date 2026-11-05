@@ -62,7 +62,7 @@
         "RMB"
       ],
       "input_source": "suggested",
-      "effect": "melee",
+      "effect": "stretch",
       "shout": null,
       "pose_frames": [
         "Leaning back with one knee pulled tight to the chest.",
@@ -82,7 +82,7 @@
         "RMB"
       ],
       "input_source": "suggested",
-      "effect": "area",
+      "effect": "float",
       "shout": "Yoga!",
       "pose_frames": [
         "Leaping upwards while tucking legs inward.",

@@ -65,15 +65,25 @@
         "LMB"
       ],
       "input_source": "suggested",
-      "effect": "projectile",
+      "effect": "abduct",
       "shout": "Flight confirmed!",
       "pose_frames": [
         "Waving a glittery fairy wand forward with a flash of light",
-        "Points the wand skyward with a flourish as the aircraft flies past"
+        "Holds the glittery star-tipped fairy wand high overhead, pointing it forward, a burst of magic sparkles streaming from its glowing star tip"
       ],
       "height_ratio": 1.0,
       "prop": "A shiny, glittery star-tipped fairy wand",
-      "prop_size": 0.4
+      "prop_size": 0.4,
+      "extra_props": {
+        "car": {
+          "description": "A black four-door Uber rideshare sedan seen from the side, facing right, with a small glowing rideshare sign in the front windshield that clearly reads UBER in white letters on black",
+          "size": 0.75
+        },
+        "plane": {
+          "description": "A white passenger jet airplane seen from the side in flight, facing right, landing gear up",
+          "size": 0.55
+        }
+      }
     }
   ],
   "warnings": [],

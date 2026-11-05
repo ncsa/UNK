@@ -219,7 +219,18 @@ Rules:
 - specials: at most 4, in the order given. For each special move: input is the button sequence the text states,
   using only the tokens W, A, S, D, LMB (punch: left click or J), RMB (kick: right click or K); an empty list
   if the text gives none (also map "punch"/"J" to LMB, "kick"/"K" to RMB, forward to D, back to A, up to W,
-  down to S). effect is one of "projectile", "melee", "area", "stun".
+  down to S). effect is one of "projectile", "melee", "area", "stun", "charge" (the fighter rides or summons
+  something that runs across the whole screen over the opponent: a vehicle, a stampede; its prop is that thing),
+  "stretch" (a limb stretches across the screen to hit), "teleport" (vanishes and reappears behind the opponent),
+  "bind" (ties up or tangles the opponent's legs so they can only hop slowly for a few seconds),
+  "beam" (a continuous ray, e.g. from the eyes or hands, that shoots across the whole screen),
+  "uppercut" (a rising jump attack that launches the opponent into the air),
+  "dash" (sprints across the whole screen through the opponent),
+  "tornado" (becomes a whirlwind that storms across the screen and back; its prop is the whirlwind),
+  "cat" (stops fighting to pet an animal, its prop, which runs in from across the screen; heals),
+  "slideshow" (a giant boring presentation fills the screen and puts the opponent to sleep),
+  "rain" (something, its prop, is thrown up and rains down over the whole screen),
+  "float" (hovers in the air for a few seconds, e.g. to dodge attacks).
   suggested_input: ALWAYS propose a sequence that suits the move, in fighting-game style, for a fighter facing
   right (D = toward the opponent, A = away). 2 or 3 directions then LMB or RMB: end in LMB for hand, weapon
   or thrown moves, RMB for leg, dash or body moves. Conventions: throwing or projectile S, D, LMB; rising or
@@ -267,7 +278,7 @@ PARSE_SCHEMA = {
             "description": {"type": "string"},
             "input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
             "suggested_input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
-            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun"]},
+            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
             "pose_frames": {"type": "array", "items": {"type": "string"}},
             "height_ratio": {"type": "number"},
             "prop": {"type": ["string", "null"]},
@@ -774,6 +785,15 @@ def stage_parse(folder, reparse):
         char["draft"] = True
     elif not gemini():
         char["parsed_offline"] = True
+    # Hand-set special settings the parser can't produce: the "abduct" effect and its extra props
+    # (e.g. {"car": {"description": ..., "size": 0.9}}), kept for a move of the same name.
+    old_specials = {sp["name"]: sp for sp in (existing or {}).get("specials", [])}
+    for sp in char["specials"]:
+        old = old_specials.get(sp["name"], {})
+        if old.get("extra_props"):
+            sp["extra_props"] = old["extra_props"]
+        if old.get("effect") == "abduct":
+            sp["effect"] = "abduct"
     # Keep fields added by hand (e.g. "proportions"); the parser never writes them.
     for k, v in (existing or {}).items():
         if k not in char and k not in ("draft", "parsed_offline"):
@@ -799,9 +819,11 @@ def frame_plan(char):
         for i, pose in enumerate(sp["pose_frames"]):
             plan.append((f"{sp['id']}_{i}", sp["id"], dict(
                 pose=f"special move \"{sp['name']}\": {pose}", expression=char["expressions"]["attack"],
-                prop=sp["prop"] if sp["effect"] != "projectile" or i == 0 else None)))
+                prop=sp["prop"] if sp["effect"] not in ("projectile", "beam") or i == 0 else None)))
         if sp["prop"]:
             plan.append((f"prop_{sp['id']}", "prop", dict(description=sp["prop"])))
+        for name, extra in sp.get("extra_props", {}).items():
+            plan.append((f"prop_{sp['id']}_{name}", "prop", dict(description=extra["description"])))
     plan.append(("portrait", "portrait", dict(expression=char["expressions"]["idle"])))
     return plan
 
@@ -1156,9 +1178,35 @@ def stage_sheet(folder, char):
         spec = anims[name]
         meta[name] = {"fps": spec["fps"], "loop": spec["loop"], "active": spec.get("active", []), "frames": []}
         for i, im in enumerate(imgs):
+            raw = np.asarray(im).astype(int)  # before the palette, which mutes a bright beam's color
             im = apply_palette(im, palette)
-            order.append((name, im, frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko",
-                                                     spec.get("hurt_h"))))
+            geo = frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko", spec.get("hurt_h"))
+            if name.startswith("special"):
+                # The highest point (e.g. an uppercut's raised fist) and the front-most point (a fist
+                # thrust forward), relative to the feet, for the game to attach things to.
+                a = np.asarray(im)[:, :, 3] > 0
+                ys, xs = np.nonzero(a)
+                top = ys.min()
+                geo["top"] = [int(round(xs[ys <= top + 2].mean())) - geo["ax"], int(top) - geo["ay"]]
+                front = xs.max()
+                geo["front"] = [int(front) - geo["ax"], int(round(ys[xs >= front - 2].mean())) - geo["ay"]]
+                # Rows where the drawing runs off the front edge (a beam cut by the canvas), so the
+                # game can continue it across the screen: [top, bottom, start] relative to the feet,
+                # start being where the beam begins (e.g. the eyes), so the game draws over it all.
+                rows = np.nonzero(raw[:, -1, 3] > 0)[0]
+                if len(rows):
+                    band = raw[rows.min():rows.max() + 1]
+                    r, g, b, a = (band[:, :, k] for k in range(4))
+                    beamy = (a > 0) & (((r > g + 60) & (r > b + 30)) | ((r > 200) & (g > 170) & (b > 170)))
+                    start, misses = band.shape[1] - 1, 0
+                    for x in range(band.shape[1] - 1, -1, -1):
+                        opaque = a[:, x] > 0
+                        if opaque.any() and beamy[:, x][opaque].mean() >= 0.5:
+                            start, misses = x, 0
+                        elif (misses := misses + 1) > 2:
+                            break
+                    geo["edge"] = [int(rows.min()) - geo["ay"], int(rows.max()) + 1 - geo["ay"], start - geo["ax"]]
+            order.append((name, im, geo))
     sheet, rects = pack([im for _, im, _ in order])
     for (name, _, geo), (x, y, w, h) in zip(order, rects):
         meta[name]["frames"].append({"x": x, "y": y, "w": w, "h": h, **geo})
@@ -1168,10 +1216,18 @@ def stage_sheet(folder, char):
     for sp in char["specials"]:
         p = frames_dir / f"prop_{sp['id']}.png"
         if sp["prop"] and p.exists():
-            im = apply_palette(fit_scale(drop_specks(remove_background(load_frame(p))),
-                                         ("h", sp["prop_size"])), palette)
+            # Its own palette: the fighter's has none of a prop's colors (a white van came out peach).
+            im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", sp["prop_size"]))
+            im = apply_palette(im, build_palette([im]))
             im.save(out / "props" / f"{sp['id']}.png")
             props[sp["id"]] = f"props/{sp['id']}.png"
+        for name, extra in sp.get("extra_props", {}).items():
+            p = frames_dir / f"prop_{sp['id']}_{name}.png"
+            if p.exists():
+                im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", extra["size"]))
+                im = apply_palette(im, build_palette([im]))
+                im.save(out / "props" / f"{sp['id']}_{name}.png")
+                props[f"{sp['id']}_{name}"] = f"props/{sp['id']}_{name}.png"
 
     portrait = frames_dir / "portrait.png"
     if portrait.exists():

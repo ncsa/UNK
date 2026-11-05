@@ -155,7 +155,7 @@ def character_summary(slug, char):
         "stats": char["stats"],
         "ai": char["ai"],
         "taunts": char.get("taunts", []),
-        "specials": [{k: sp.get(k) for k in ("id", "name", "input", "effect", "shout")}
+        "specials": [{k: sp.get(k) for k in ("id", "name", "input", "effect", "shout", "extra_props")}
                      for sp in char["specials"]],
         "sheet": f"{base}/sheet.json",
         "version": v,

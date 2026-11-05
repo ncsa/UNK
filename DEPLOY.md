@@ -11,9 +11,14 @@
 ## What's in the image, and what isn't
 
 The image carries the code and the built game: sprite sheets, arenas, character music,
-sound effects, the splash video and the selection music. `docker build` makes the sprite
-sheets itself from the frames in `Characters/*/frames` (no API calls), so the host needs
-nothing but Docker: no Python, no keys. Your local `build/` folder is ignored.
+sound effects, the splash video and the selection music. The sprite sheets are the ones
+committed in `build/characters`, so `docker build` just installs the server's few packages
+and copies files; the host needs nothing but Docker: no Python, no keys. The raw frames in
+`Characters/*/frames` and the asset tools stay out of the image.
+
+**Commit `build/` with your character changes.** After `add_character.py` (or editing a
+`character.json`), run `python add_character.py --all --stage sheet` and commit `build/`
+along with it; that's what the image serves.
 
 Two things are **mounted** instead, so they survive rebuilds and never end up in the image:
 
@@ -67,9 +72,9 @@ flowchart LR
 
 - A server with Docker + Compose, reachable from the internet on ports **80 and 443**.
 - A DNS **A/AAAA record** for the hostname pointing at that server.
-- This folder copied to the server (a `git clone` works), **including `Characters/*/frames`**:
-  the image builds the sprite sheets from them. Plus `users.csv`, which isn't in git or the
-  image. For example: `rsync -av --exclude .venv --exclude build --exclude Sounds/raw ./ <server>:unk/`
+- This folder copied to the server (a `git clone` works), **including `build/`**: the image
+  serves the sprite sheets in it. Plus `users.csv`, which isn't in git or the image. For
+  example: `rsync -av --exclude .venv --exclude Sounds/raw ./ <server>:unk/`
 - No Python needed on the server. `source setup.sh` only sets `UNK_HOSTNAME` and `ACME_EMAIL`.
 
 ### Deploy

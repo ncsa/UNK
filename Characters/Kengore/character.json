@@ -62,7 +62,7 @@
         "LMB"
       ],
       "input_source": "suggested",
-      "effect": "projectile",
+      "effect": "beam",
       "shout": "Burn!",
       "pose_frames": [
         "Leaning back slightly while gathering energy in the eyes",

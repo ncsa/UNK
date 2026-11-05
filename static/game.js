@@ -30,6 +30,7 @@ const FALLBACK_ANIMS = {
 const LANDING_TICKS = 6;   // recovery after landing from an air attack
 const SPECIAL = { startup: 14, active: 16, recovery: 18, cooldown: 240 };
 const STUN_TICKS = 110;
+const BEAM = { startup: 14, active: 34, recovery: 14, every: 8, hits: 3 };
 
 // ---------------------------------------------------------------- helpers
 
@@ -73,12 +74,14 @@ class Fighter {
     Object.assign(this, {
       x, y: 0, vx: 0, vy: 0, facing, health: this.stats.health, trail: this.stats.health,
       state: "idle", t: 0, hasHit: false, hitCount: 0, stunFor: 0, cooldown: 0,
-      special: null, shout: null, holdingBack: false, holdingDown: false, airAttacked: false,
+      special: null, shout: null, holdingBack: false, holdingDown: false, airAttacked: false, hidden: false, held: false, stretch: 0, bound: 0, ghosts: [], passThrough: false, floating: false,
     });
   }
 
   setState(state) {
     if (this.state === state) return;
+    if (this.state === "dizzy") this.sleepy = false;
+    if (this.special && this.state === this.special.id) { this.floating = false; this.passThrough = false; this.ghosts = []; this.cat = null; this.stopT = 0; }
     this.state = state; this.t = 0; this.hasHit = false; this.hitCount = 0;
   }
 
@@ -98,6 +101,14 @@ class Fighter {
     let anim, i = 0;
     if (s in ATTACKS) {
       anim = this.anim(s); i = this.t < ATTACKS[s].startup ? 0 : 1;
+    } else if (s.startsWith("special") && this.special?.effect === "beam") {
+      anim = this.t < BEAM.startup ? this.anim("idle") : this.anim(s);
+    } else if (s.startsWith("special") && this.special?.effect === "cat") {
+      // waiting for the cat (normal stance), the cat at her feet (frame 0, which has it), petting it (1)
+      const k = this.cat?.arrived ? this.t - this.cat.arrived : -1;
+      anim = k < 0 ? this.anim("idle") : this.anim(s); i = k < 15 ? 0 : 1;
+    } else if (s.startsWith("special") && this.special?.effect === "charge") {
+      anim = this.anim("jump");
     } else if (s.startsWith("special")) {
       anim = this.anim(s); i = this.t < SPECIAL.startup ? 0 : 1;
     } else if (s === "dizzy") {
@@ -117,6 +128,202 @@ class Fighter {
 
   hurtBox() { return this.worldBox(this.currentFrame().hurt); }
 
+  // Float: hover cross-legged high enough that ground attacks pass underneath, for a few
+  // seconds. Drift with left/right; down drops out early; getting hit ends it.
+  updateFloat(opp, input) {
+    const t = this.t, s = SPECIAL, HEIGHT = 70, TICKS = 180;
+    if (t === 1 && !this.airborne) { this.vy = 6.2; this.y = 0.01; }  // hop up from the ground
+    if (t < s.startup) return;
+    if (!this.floating) { this.floating = true; this.floatY = this.y; this.vy = 0; }
+    const k = t - s.startup;
+    this.floatY += clamp(HEIGHT - this.floatY, -1.5, 1.5);  // ease to the hover height
+    this.y = this.floatY + Math.sin(k * 0.08) * 3;
+    this.vx = (input.move || 0) * 1.1;
+    if (k > TICKS || input.crouch) {
+      this.floating = false; this.vy = -0.5;
+      this.facing = opp.x >= this.x ? 1 : -1;
+      this.setState("jump");  // and fall
+    }
+  }
+
+  // Dash: sprint across the whole screen through the opponent. Tornado: storm to the far side of
+  // the screen and back as a whirlwind. Both pass through the opponent (see Match.separate).
+  updateRun(sp, opp, match) {
+    const t = this.t, s = SPECIAL, tornado = sp.effect === "tornado";
+    const speed = tornado ? 7.5 : 9.5;
+    if (t === s.startup) {
+      const camX = match.camX();
+      this.runFrom = this.x;
+      this.runTo = clamp(this.facing > 0 ? camX + W - 26 : camX + 26, 18, match.stageWidth - 18);
+      this.runDir = this.facing; this.leg = 0; this.lastHit = -99; this.passThrough = true;
+      sfx(tornado ? "special" : "punch_whoosh", { x: this.x });
+    }
+    if (t < s.startup) return;
+    if (this.leg < (tornado ? 2 : 1)) {
+      const goal = this.leg === 0 ? this.runTo : this.runFrom, dir = Math.sign(goal - this.x) || this.runDir;
+      this.vx = dir * speed;
+      this.facing = this.runDir;  // she keeps facing the same way, tornado or not
+      if (Math.abs(goal - this.x) <= speed || (dir < 0 ? this.x <= 18 : this.x >= match.stageWidth - 18)) {
+        this.x = goal; this.vx = 0; this.leg++;
+      }
+      this.ghosts.unshift(this.x); this.ghosts.length = Math.min(this.ghosts.length, 4);
+      const box = tornado ? [-40, -130, 80, 130] : [-22, -100, 52, 95];
+      const maxHits = tornado ? 3 : 1;
+      if (this.hitCount < maxHits && t - this.lastHit > 14 && overlap(this.worldBox(box), opp.hurtBox())) {
+        this.hitCount++; this.lastHit = t;
+        const dmg = this.stats.special_damage * (tornado ? 0.55 : 1);
+        opp.receive(this, dmg, match, { hitstun: tornado ? 40 : 30, push: 4, launch: tornado ? 7 : 5 });
+      }
+      return;
+    }
+    // arrived: skid to a stop, then turn back to the opponent
+    this.vx = 0; this.passThrough = false;
+    if (this.ghosts.length) this.ghosts.pop();
+    if ((this.stopT = (this.stopT || 0) + 1) > s.recovery) {
+      this.stopT = 0; this.ghosts = [];
+      this.facing = opp.x >= this.x ? 1 : -1;
+      this.setState("idle");
+    }
+  }
+
+  // Cat: a cat (the prop) scampers in from the far side, tripping the opponent on the way, and
+  // runs to her; she sits and pets it, slowly healing, wide open to attack.
+  updateCat(sp, opp, match) {
+    const t = this.t, img = this.char.props[sp.id];
+    if (t === 1) {
+      const camX = match.camX(), w = img ? img.width : 24;
+      this.cat = { x: this.facing > 0 ? camX + W + w : camX - w, dir: -this.facing, img, tripped: false, arrived: 0 };
+      this.healed = 0;
+    }
+    const c = this.cat;
+    if (!c) { this.setState("idle"); return; }
+    if (!c.arrived) {
+      c.x += c.dir * 5;
+      const w = c.img ? c.img.width : 24, h = c.img ? c.img.height : 24;
+      if (!c.tripped && !opp.airborne && overlap({ x: c.x - w / 2, y: GROUND - h, w, h }, opp.hurtBox())) {
+        c.tripped = true;
+        opp.receive(this, 4, match, { hitstun: 22, push: 1, launch: 2.5, level: "low" });
+      }
+      if ((this.x - c.x) * c.dir <= 10) { c.arrived = t; sfx("ready", { x: this.x }); }
+    } else {
+      const heal = Math.min(this.stats.health * 0.12 / 60, this.stats.health - this.health);
+      if (t - c.arrived < 60 && heal > 0) { this.health += heal; this.healed += heal; }
+      if (t - c.arrived > 75) { this.cat = null; this.facing = opp.x >= this.x ? 1 : -1; this.setState("idle"); }
+    }
+    if (t > 400) { this.cat = null; this.setState("idle"); }
+  }
+
+  // Claws coming out of the knuckles: three steel blades drawn at the fist's own scale (a
+  // picture of claws shrunk to fist size smears). Drawn behind the sprite so the fist covers
+  // their roots. character.json, extra_props.claws: attach = [[x, y, angle], ...] per frame
+  // (relative to the feet, facing right), fist (root spread), length, blade width.
+  drawClaws(ctx, f, px, py) {
+    const rising = this.t >= SPECIAL.startup;
+    const cfg = this.special.extra_props.claws;
+    const [cx, cy, ang] = cfg.attach?.[rising ? 1 : 0] ||
+      [...((rising ? f.top : f.front) || [f.w - f.ax, -f.ay]), rising ? 0.15 : 0.45];
+    const fist = cfg.fist || 9, len = (cfg.length || 26) * (rising ? 1 : Math.min(1, this.t / 5));  // spring out
+    const hw = (cfg.blade || 3) / 2;
+    ctx.save();
+    ctx.translate(px + this.facing * cx, py + cy);
+    ctx.scale(this.facing, 1);
+    ctx.rotate(ang);
+    const tri = (pts, color) => {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(...pts[0]);
+      for (const q of pts.slice(1)) ctx.lineTo(...q);
+      ctx.closePath(); ctx.fill();
+    };
+    for (const k of [-1, 0, 1]) {
+      const bx = k * fist / 3, tx = k * (fist / 3 + 1.5), ty = -len + Math.abs(k) * 2;
+      tri([[bx - hw - 1, 0], [bx + hw + 1, 0], [tx, ty - 1]], "#181820");  // outline
+      tri([[bx - hw, 0], [bx + hw, 0], [tx, ty]], "#b0b8c4");              // steel
+      ctx.strokeStyle = "#fafcff"; ctx.lineWidth = 1;                     // shine
+      ctx.beginPath(); ctx.moveTo(bx - hw + 0.5, 0); ctx.lineTo(tx, ty + 1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // The whirlwind (the prop) behind her, and papers swirling in front.
+  drawTornado(ctx, px, behind) {
+    const img = this.char.props[this.special.id], t = this.t;
+    if (behind) {
+      if (!img) return;
+      ctx.save();
+      ctx.globalAlpha = 0.8;
+      ctx.translate(px + Math.sin(t * 0.5) * 3, GROUND + 2);
+      if (Math.floor(t / 3) % 2) ctx.scale(-1, 1);  // flicker-spin
+      ctx.drawImage(img, -img.width / 2, -img.height);
+      ctx.restore();
+      return;
+    }
+    for (let i = 0; i < 12; i++) {
+      const a = t * 0.35 + i * 1.7, r = 18 + (i % 4) * 9;
+      const x = px + Math.cos(a) * r, y = GROUND - 12 - i * 11 + Math.sin(a) * 4;
+      if (Math.sin(a) < -0.2) continue;  // behind her
+      ctx.fillStyle = "#222"; ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 6, 5);
+      ctx.fillStyle = i % 3 ? "#f4f4f0" : "#dfe6ff"; ctx.fillRect(Math.round(x), Math.round(y), 4, 3);
+    }
+  }
+
+  drawCat(ctx, camX, py) {
+    const c = this.cat;
+    if (c.arrived) {  // hearts while petting
+      const k = this.t - c.arrived;
+      if (k > 70) return;
+      ctx.font = `8px ${FONT}`; ctx.textAlign = "center"; ctx.fillStyle = "#ff6fae";
+      for (let i = 0; i < 3; i++) {
+        const h = (k * 0.6 + i * 14) % 40;
+        ctx.globalAlpha = 1 - h / 40;
+        ctx.fillText("\u2665", Math.round(this.x - camX - 10 + i * 10), Math.round(py - 70 - h));
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const img = c.img, x = Math.round(c.x - camX), bob = Math.abs(Math.sin(this.t * 0.6)) * 3;
+    ctx.save();
+    ctx.translate(x, GROUND + 1 - bob);
+    if (c.dir > 0) ctx.scale(-1, 1);
+    if (img) ctx.drawImage(img, -img.width / 2, -img.height);
+    else { ctx.fillStyle = "#e89a3c"; ctx.fillRect(-10, -16, 20, 16); }
+    ctx.restore();
+  }
+
+  drawBeam(ctx, camX, f, px, py) {
+    const t = this.t;
+    if (t < BEAM.startup) {  // eyes charging up
+      const r = 1 + t / 4, ey = py - f.ay + Math.round(f.h * 0.14);
+      ctx.fillStyle = `rgba(255,60,60,${0.4 + t / 40})`;
+      ctx.beginPath(); ctx.arc(px + this.facing * 6, ey, r, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    if (t >= BEAM.startup + BEAM.active) return;
+    const fade = Math.min(1, (BEAM.startup + BEAM.active - t) / 6);
+    const b = this.beamBox(camX), x = b.x - camX, mid = b.y + b.h / 2;
+    const wobble = (t % 4 < 2) ? 1 : 0;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = "rgba(255,40,40,0.35)"; ctx.fillRect(x, mid - b.h / 2 - 2 - wobble, b.w, b.h + 4 + wobble * 2);
+    ctx.fillStyle = "#ff2a2a"; ctx.fillRect(x, mid - b.h / 2 + 1, b.w, Math.max(2, b.h - 2));
+    ctx.fillStyle = "#ffd0d0"; ctx.fillRect(x, mid - 1, b.w, 1 + wobble);
+    ctx.globalAlpha = 1;
+  }
+
+  // The beam from the front edge of the sprite to the edge of the screen (world coordinates).
+  beamBox(camX) {
+    const f = this.currentFrame();
+    // edge: rows and starting column of the beam drawn in the sprite (see add_character.py);
+    // the beam is drawn from there, over the sprite's own (palette-muted) one.
+    const [top, bottom, from] = f.edge || [-Math.round(f.h * 0.86), -Math.round(f.h * 0.82)];
+    const start = this.x + this.facing * (from ?? f.w - f.ax - 1);
+    const end = this.facing > 0 ? camX + W : camX;
+    return { x: Math.min(start, end), y: GROUND - this.y + top - 1, w: Math.abs(end - start), h: bottom - top + 2 };
+  }
+
+  // Roughly where a raised wand's tip is: the sprite's top front corner.
+  wandTip() {
+    const f = this.currentFrame();
+    return { x: this.x + this.facing * (f.w - f.ax - 14), y: GROUND - this.y - f.ay + 9 };
+  }
+
   hitBox() {
     const f = this.currentFrame();
     // Sprite-derived boxes can be thin; guarantee a fair reach.
@@ -127,6 +334,8 @@ class Fighter {
 
   update(input, opp, match) {
     this.t++;
+    if (this.held) return;  // inside an abduct special's vehicle
+    if (this.bound > 0) this.bound--;  // legs taped by a bind special
     if (this.cooldown > 0 && --this.cooldown === 0 && this.isPlayer) sfx("ready");
     if (this.shout && --this.shout.t <= 0) this.shout = null;
     this.holdingBack = input.move === -this.facing && !this.airborne;
@@ -152,7 +361,7 @@ class Fighter {
           const a = ATTACKS[this.state];
           if (this.t >= a.startup + a.active + a.recovery) this.setState(this.airborne ? "jump" : "idle");
         } else if (this.state.startsWith("special")) {
-          this.updateSpecial(opp, match);
+          this.updateSpecial(opp, match, input);
         }
     }
 
@@ -160,7 +369,9 @@ class Fighter {
 
     // physics
     this.x += this.vx;
-    if (this.airborne) {
+    if (this.floating) {
+      // hovering (float specials): height is set in updateFloat, no gravity
+    } else if (this.airborne) {
       this.y += this.vy; this.vy -= GRAVITY;
       if (this.y <= 0) {
         this.y = 0; this.vy = 0;
@@ -170,6 +381,7 @@ class Fighter {
         if (this.state === "ko") this.vx *= 0.5;
       }
     } else if (["hit", "block", "crouch_block", "ko", "dizzy"].includes(this.state) || this.state.startsWith("special")) {
+      // (grounded only: airborne specials such as an uppercut keep their drift)
       this.vx *= 0.82;
     }
     if (!this.airborne && this.canAct && this.state !== "walk") this.vx = 0;
@@ -196,7 +408,7 @@ class Fighter {
       return;
     }
     if (this.airborne) return;
-    if (input.jump) {
+    if (input.jump && !this.bound) {
       this.vy = this.stats.jump_power; this.y = 0.01;
       this.vx = input.move * this.stats.walk_speed * 1.1;
       this.setState("jump");
@@ -205,6 +417,7 @@ class Fighter {
     } else if (input.move) {
       this.setState("walk");
       this.vx = input.move * this.stats.walk_speed * (input.move === this.facing ? 1 : 0.75);
+      if (this.bound) this.vx *= 0.35 * (Math.sin(this.t * 0.3) > 0 ? 2 : 0);  // taped legs: slow little hops
     } else {
       this.setState("idle");
     }
@@ -219,10 +432,74 @@ class Fighter {
     sfx("special", { x: this.x });
   }
 
-  updateSpecial(opp, match) {
+  updateSpecial(opp, match, input = {}) {
     const sp = this.special, t = this.t, s = SPECIAL;
     const dmg = this.stats.special_damage;
+    if (sp.effect === "float") return this.updateFloat(opp, input);
+    if (sp.effect === "charge") {
+      // The vehicle (see Match.updateCharges) picks the fighter up and drops them off; this is a backstop.
+      if (t === 1) match.spawnCharge(this, opp, sp);
+      else if (t > 300) { this.hidden = false; this.setState("idle"); }
+      return;
+    }
+    if (sp.effect === "stretch") {
+      // The kicking leg stretches to reach the opponent, holds, then snaps back.
+      const f = this.currentFrame();
+      const reach = (f.hit ? f.hit[0] + f.hit[2] : f.w - f.ax);
+      const want = t < s.startup + s.active ? clamp(Math.abs(opp.x - this.x) - reach + 10, 0, 280) : 0;
+      this.stretch += clamp(want - this.stretch, -24, 36);
+      if (t >= s.startup && t < s.startup + s.active && !this.hasHit && this.stretch > 0) {
+        const box = f.hit ? [...f.hit] : [8, -Math.round(f.h * 0.75), 30, 24];
+        box[2] += this.stretch;
+        if (overlap(this.worldBox(box), opp.hurtBox())) {
+          this.hasHit = true;
+          opp.receive(this, dmg, match, { hitstun: 26, push: 5 });
+        }
+      }
+    }
+    if (sp.effect === "beam") {
+      const on = t >= BEAM.startup && t < BEAM.startup + BEAM.active;
+      if (t === BEAM.startup) sfx("throw", { x: this.x });
+      if (on && (t - BEAM.startup) % BEAM.every === 0 && this.hitCount < BEAM.hits &&
+          overlap(this.beamBox(match.camX()), opp.hurtBox())) {
+        this.hitCount++;
+        opp.receive(this, Math.ceil(dmg / BEAM.hits), match, { hitstun: 14, push: 1.5 });
+      }
+      if (t >= BEAM.startup + BEAM.active + BEAM.recovery) {
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState(this.airborne ? "jump" : "idle");
+      }
+      return;
+    }
+    if (sp.effect === "dash" || sp.effect === "tornado") return this.updateRun(sp, opp, match);
+    if (sp.effect === "cat") return this.updateCat(sp, opp, match);
+    if (sp.effect === "uppercut") {
+      // Leap up and forward, fist (and claws) first, launching the opponent.
+      if (t === s.startup && !this.airborne) { this.vy = 6.8; this.y = 0.01; this.vx = this.facing * 1.6; }
+      if (t >= s.startup && t < s.startup + s.active + 6 && !this.hasHit &&
+          overlap(this.worldBox([-6, -125, 52, 115]), opp.hurtBox())) {
+        this.hasHit = true;
+        opp.receive(this, dmg, match, { hitstun: 34, push: 3, launch: 6.5 });
+      }
+      if (t >= s.startup + s.active + s.recovery && !this.airborne) {
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState("idle");
+      }
+      return;
+    }
+    if (sp.effect === "teleport") {
+      if (t === s.startup) match.teleport(this, opp);
+      if (t >= s.startup && t < s.startup + s.active && !this.hasHit &&
+          overlap(this.worldBox([0, -100, 56, 90]), opp.hurtBox())) {
+        this.hasHit = true;  // from behind: no chance to block
+        opp.receive(this, dmg, match, { hitstun: 28, push: 4, unblockable: true });
+      }
+    }
     if (t === s.startup) {
+      if (sp.effect === "slideshow") match.spawnSlideshow(this, opp, sp);
+      if (sp.effect === "rain") match.spawnRain(this, opp, sp);
+      if (sp.effect === "bind") match.spawnTape(this, sp);
+      if (sp.effect === "abduct") match.spawnAbduct(this, opp, sp);
       if (sp.effect === "projectile") match.spawnProjectile(this, sp);
       if (sp.effect === "stun") match.spawnDrop(this, opp, sp);
     }
@@ -240,14 +517,19 @@ class Fighter {
       }
       if (sp.effect === "area") this.facing = (Math.floor(t / 4) % 2) ? 1 : -1;  // spin
     }
+    // Slideshow: keep presenting while the slides are up.
+    if (sp.effect === "slideshow" && t > s.startup && t < 400 && match.slideshows.some(a => a.owner === this)) return;
+    // Abduct: hold the wand up until the car and plane are done; the wand drives the whole move.
+    if (sp.effect === "abduct" && t > s.startup && t < 600 && match.abducts.some(a => a.owner === this)) return;
     if (t >= s.startup + s.active + s.recovery) {
+      this.stretch = 0;
       this.facing = opp.x >= this.x ? 1 : -1;
       this.setState(this.airborne ? "jump" : "idle");
     }
   }
 
   receive(attacker, damage, match, { hitstun = 16, push = 2.5, stun = 0, unblockable = false, launch = 0, level = "mid" } = {}) {
-    if (["ko", "victory", "defeat"].includes(this.state)) return;
+    if (["ko", "victory", "defeat"].includes(this.state) || this.hidden || this.held) return;
     // Hold back to block; hold back and down to block low. Lows must be blocked crouching,
     // attacks from the air standing.
     const low = this.holdingDown;
@@ -282,14 +564,37 @@ class Fighter {
   }
 
   draw(ctx, camX) {
+    if (this.hidden || this.held) return;  // riding in a special's vehicle
     const f = this.currentFrame();
     const img = this.char.img;
-    const px = Math.round(this.x - camX), py = Math.round(GROUND - this.y);
+    const hop = this.bound && this.state === "walk" ? Math.round(Math.max(0, Math.sin(this.t * 0.3)) * 7) : 0;
+    const px = Math.round(this.x - camX), py = Math.round(GROUND - this.y) - hop;
     // shadow
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.beginPath();
     ctx.ellipse(px, GROUND + 1, Math.max(10, 22 - this.y / 6), 4, 0, 0, Math.PI * 2);
     ctx.fill();
+
+    if (this.floating) {  // soft glow and rising motes under a hovering fighter
+      ctx.fillStyle = `rgba(190,230,255,${0.18 + Math.sin(this.t * 0.15) * 0.06})`;
+      ctx.beginPath(); ctx.ellipse(px, py + 4, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(220,245,255,0.8)";
+      for (let i = 0; i < 5; i++) {
+        const k = (this.t * 0.7 + i * 9) % 30;
+        ctx.fillRect(Math.round(px - 18 + i * 9), Math.round(py + 6 - k), 1, 2);
+      }
+    }
+    if (this.special?.extra_props?.claws && this.state === this.special.id) this.drawClaws(ctx, f, px, py);
+    const inSpecial = this.special && this.state === this.special.id;
+    if (inSpecial && this.special.effect === "tornado" && this.t >= SPECIAL.startup) this.drawTornado(ctx, px, true);
+    for (const [k, gx] of this.ghosts.entries()) {  // afterimages behind a dash
+      ctx.save();
+      ctx.globalAlpha = 0.35 - k * 0.08;
+      ctx.translate(Math.round(gx - camX - this.runDir * (k + 1) * 4), py);
+      if (this.facing < 0) ctx.scale(-1, 1);
+      ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+      ctx.restore();
+    }
 
     ctx.save();
     ctx.translate(px, py);
@@ -298,13 +603,50 @@ class Fighter {
     const flash = this.state === "hit" && this.t < 4;
     if (flash) ctx.filter = "brightness(2.2)";
     if (this.state === "dizzy") ctx.translate(Math.sin(this.t / 3) * 2, 0);
-    ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+    const ext = Math.round(this.stretch);
+    if (ext > 0) {
+      const cut = f.ax + Math.round((f.w - f.ax) * 0.6);
+      ctx.drawImage(img, f.x, f.y, cut, f.h, -f.ax, -f.ay, cut, f.h);
+      ctx.drawImage(img, f.x + cut, f.y, 1, f.h, -f.ax + cut, -f.ay, ext, f.h);
+      ctx.drawImage(img, f.x + cut, f.y, f.w - cut, f.h, -f.ax + cut + ext, -f.ay, f.w - cut, f.h);
+    } else {
+      ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+    }
     ctx.restore();
 
+    if (this.bound) drawTape(ctx, px, py, this.hurtBox().w, this.bound);
+    if (this.special?.effect === "beam" && this.state === this.special.id) this.drawBeam(ctx, camX, f, px, py);
+    if (inSpecial && this.special.effect === "tornado" && this.t >= SPECIAL.startup) this.drawTornado(ctx, px, false);
+    if (inSpecial && this.cat) this.drawCat(ctx, camX, py);
     const top = py - f.ay;
-    if (this.state === "dizzy") drawDizzy(ctx, px, top - 6, this.t);
+    if (this.state === "dizzy") (this.sleepy ? drawZzz : drawDizzy)(ctx, px, top - 6, this.t);
     if (this.shout) drawBubble(ctx, this.shout.text, px, top - 8, camX);
   }
+}
+
+function drawZzz(ctx, x, y, t) {
+  ctx.font = `8px ${FONT}`; ctx.textAlign = "center";
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 0.5 + i * 12) % 36;
+    ctx.globalAlpha = 1 - k / 36;
+    outlinedText(ctx, "Z", Math.round(x + 6 + k * 0.5 + i * 2), Math.round(y - k), "#cfe3ff");
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawTape(ctx, x, feetY, bodyW, left) {
+  const w = Math.max(16, Math.round(bodyW * 0.55));
+  if (left < 40 && left % 8 < 4) return;  // flicker as it comes loose
+  for (const [dy, tilt] of [[-7, 1], [-15, -1], [-23, 1]]) {
+    ctx.save();
+    ctx.translate(x, feetY + dy);
+    ctx.rotate(tilt * 0.12);
+    ctx.fillStyle = "#222"; ctx.fillRect(-w / 2 - 1, -3, w + 2, 7);
+    ctx.fillStyle = "#b8bcc2"; ctx.fillRect(-w / 2, -2, w, 5);
+    ctx.fillStyle = "#e6e8ea"; ctx.fillRect(-w / 2, -2, w, 1);
+    ctx.restore();
+  }
+  ctx.fillStyle = "#b8bcc2"; ctx.fillRect(x + w / 2 - 2, feetY - 9, 6, 3);  // loose end
 }
 
 function drawDizzy(ctx, x, y, t) {
@@ -477,8 +819,8 @@ class AI {
     if (!f.canAct) return {};
 
     const specials = f.char.specials.filter(() => f.cooldown === 0);
-    const ranged = specials.filter(s => s.effect === "projectile" || s.effect === "stun");
-    const close = specials.filter(s => s.effect === "melee" || s.effect === "area" || s.effect === "stun");
+    const ranged = specials.filter(s => ["projectile", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport"].includes(s.effect));
+    const close = specials.filter(s => ["melee", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
     const think = Math.round(rand(6, 22) * (1.3 - tr.aggression));
     let action;
     if (dist > 70) {
@@ -616,7 +958,7 @@ class Match {
     const mid = this.stageWidth / 2;
     this.p1.reset(mid - 70, 1);
     this.p2.reset(mid + 70, -1);
-    this.projectiles = []; this.drops = []; this.sparks = [];
+    this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.tapes = []; this.slideshows = []; this.rains = [];
     this.phase = "intro"; this.phaseT = 0;
     this.timer = ROUND_SECONDS; this.timerTicks = 0;
     this.shake = 0; this.banner = null;
@@ -666,6 +1008,14 @@ class Match {
       this.updateProjectiles();
       this.updateDrops();
     }
+    this.updateCharges();
+    this.updateAbducts();
+    this.updateTapes();
+    this.updateSlideshows();
+    this.updateRains();
+    this.puffs = this.puffs.filter(p => ++p.t < 30);
+    for (const g of this.glitter) { g.x += g.vx; g.y += g.vy; g.vy += 0.03; }
+    this.glitter = this.glitter.filter(g => ++g.t < 26);
     this.separate();
     for (const f of [p1, p2]) f.trail = Math.max(f.health, f.trail - 0.35);
     this.sparks = this.sparks.filter(s => ++s.t < 12);
@@ -712,6 +1062,11 @@ class Match {
     const { p1, p2 } = this;
     this.phase = "roundEnd"; this.phaseT = 0; this.banner = reason;
     this.projectiles = []; this.drops = [];
+    for (const c of this.charges) if (!c.dropped) this.dropOff(c);  // the vehicle keeps driving off
+    this.tapes = []; this.slideshows = []; this.rains = [];
+    for (const f of [p1, p2]) f.bound = 0;
+    for (const a of this.abducts) if (a.target.held) { a.target.held = false; a.target.y = 0; a.target.setState("idle"); }
+    this.abducts = [];
     let winner = null;
     const r1 = p1.health / p1.stats.health, r2 = p2.health / p2.stats.health;
     if (r1 > r2) winner = p1; else if (r2 > r1) winner = p2;
@@ -735,6 +1090,7 @@ class Match {
   resolveHits(a, d) {
     const atk = ATTACKS[a.state];
     if (!atk || a.hasHit) return;
+    if (d.floating && !atk.air) return;  // ground attacks pass under a floating fighter
     if (a.t < atk.startup || a.t >= atk.startup + atk.active) return;
     if (overlap(a.hitBox(), d.hurtBox())) {
       a.hasHit = true;
@@ -745,6 +1101,7 @@ class Match {
 
   separate() {
     const { p1, p2 } = this;
+    if (p1.passThrough || p2.passThrough) return;  // dashing through the opponent
     if (Math.abs(p1.y - p2.y) > 60) return;
     const dx = p2.x - p1.x;
     if (Math.abs(dx) >= PUSH_DISTANCE) return;
@@ -774,6 +1131,288 @@ class Match {
       }
     }
     this.projectiles = this.projectiles.filter(p => !p.done && p.x > -60 && p.x < this.stageWidth + 60);
+  }
+
+  camX() {
+    return clamp(Math.round((this.p1.x + this.p2.x) / 2 - W / 2), 0, this.stageWidth - W);
+  }
+
+  // Charge specials: the prop (a van, a stampede...) drives in from off screen behind the owner,
+  // picks them up, runs across the whole screen over the opponent, and drops the owner off past them.
+  spawnCharge(owner, target, sp) {
+    const img = owner.char.props[sp.id];
+    const h = img ? img.height : 90, w = img ? img.width : 160;
+    const dir = owner.facing, camX = this.camX();
+    this.charges.push({
+      owner, target, sp, img, w, h, dir, v: 5, picked: false, dropped: false, hit: false,
+      x: dir > 0 ? Math.min(camX - w / 2, owner.x - w) : Math.max(camX + W + w / 2, owner.x + w),  // off screen
+      dropX: clamp(target.x + dir * 70, 18, this.stageWidth - 18),
+    });
+    sfx("throw", { x: owner.x });
+  }
+
+  dropOff(c) {
+    const o = c.owner;
+    c.dropped = true;
+    o.hidden = false;
+    if (o.state.startsWith("special")) {
+      o.x = c.dropX; o.y = 0; o.vx = 0; o.vy = 0;
+      o.facing = c.target.x >= o.x ? 1 : -1;
+      o.setState("idle");
+    }
+  }
+
+  updateCharges() {
+    for (const c of this.charges) {
+      c.v = Math.min(c.v + 0.7, 13);
+      c.x += c.v * c.dir;
+      const o = c.owner, past = x => (c.x - x) * c.dir >= 0;
+      if (!c.picked && past(o.x)) { c.picked = true; o.hidden = true; o.vx = 0; }
+      if (!c.hit && this.phase === "fight") {
+        const box = { x: c.x - c.w / 2, y: GROUND - c.h, w: c.w, h: c.h };
+        if (overlap(box, c.target.hurtBox())) {
+          c.hit = true;
+          c.target.receive(o, o.stats.special_damage, this, { hitstun: 34, push: 6, launch: 5 });
+          sfx("slam", { x: c.target.x });
+          this.shake = 10;
+        }
+      }
+      if (c.picked && !c.dropped && past(c.dropX)) this.dropOff(c);
+    }
+    const camX = this.camX();
+    this.charges = this.charges.filter(c => !c.dropped ||
+      (c.dir > 0 ? c.x - c.w / 2 < camX + W + 20 : c.x + c.w / 2 > camX - 20));
+  }
+
+  // Teleport specials: vanish in a burst of particles and reappear on the far side of the opponent.
+  teleport(f, opp) {
+    const side = Math.sign(opp.x - f.x) || f.facing;
+    this.puffs.push({ x: f.x, y: GROUND - f.y - 50, t: 0 });
+    f.x = clamp(opp.x + side * 44, 18, this.stageWidth - 18);
+    f.y = 0; f.vx = 0; f.vy = 0;
+    f.facing = opp.x >= f.x ? 1 : -1;
+    this.puffs.push({ x: f.x, y: GROUND - 50, t: 0 });
+    sfx("special", { x: f.x });
+  }
+
+  // Abduct specials: a car (prop "<id>_car") drives in and grabs the opponent off the ground, then
+  // a plane (prop "<id>_plane") flies over and drops them from the sky for heavy damage.
+  spawnAbduct(owner, target, sp) {
+    const car = owner.char.props[`${sp.id}_car`], plane = owner.char.props[`${sp.id}_plane`];
+    const dir = owner.facing, camX = this.camX();
+    const cw = car ? car.width : 150;
+    this.abducts.push({
+      owner, target, sp, car, plane, dir, phase: "car", v: 4, t: 0,
+      x: dir > 0 ? Math.min(camX - cw / 2, owner.x - cw) : Math.max(camX + W + cw / 2, owner.x + cw),
+    });
+    sfx("throw", { x: owner.x });
+  }
+
+  // Magic glitter streaming from the wand to the vehicle it's steering, and trailing behind it.
+  sprinkle(a) {
+    const img = a.phase === "car" ? a.car : a.plane;
+    const w = img ? img.width : 150, h = img ? img.height : 60;
+    const vy = a.phase === "car" ? GROUND - h / 2 : 34 + h / 2;
+    const tip = a.owner.state.startsWith("special") ? a.owner.wandTip() : null;
+    for (let i = 0; i < 8; i++) {
+      if (tip) {
+        const u = Math.random();
+        this.glitter.push({ x: tip.x + (a.x - tip.x) * u + rand(-4, 4), y: tip.y + (vy - tip.y) * u + rand(-4, 4),
+                            vx: rand(-0.3, 0.3), vy: rand(-0.4, 0.2), t: 0 });
+      }
+      this.glitter.push({ x: a.x - a.dir * (w / 2 + rand(0, 20)), y: vy + rand(-h / 2, h / 2),
+                          vx: -a.dir * rand(0.2, 1), vy: rand(-0.3, 0.3), t: 0 });
+    }
+  }
+
+  updateAbducts() {
+    const camX = this.camX();
+    for (const a of this.abducts) {
+      a.t++;
+      const tg = a.target;
+      if (a.phase !== "wait") this.sprinkle(a);
+      if (a.phase === "car") {
+        const w = a.car ? a.car.width : 150, h = a.car ? a.car.height : 70;
+        a.v = Math.min(a.v + 0.6, 11);
+        a.x += a.v * a.dir;
+        if (!a.grabbed && this.phase === "fight" && tg.y < 30 &&
+            overlap({ x: a.x - w / 2, y: GROUND - h, w, h }, tg.hurtBox())) {
+          a.grabbed = true; tg.held = true; tg.vx = 0; tg.vy = 0;
+          sfx("hit_heavy", { x: tg.x });
+        }
+        const gone = a.dir > 0 ? a.x - w / 2 > camX + W : a.x + w / 2 < camX;
+        if (gone) {
+          if (!a.grabbed) { a.done = true; continue; }  // missed (they jumped): no plane
+          a.phase = "wait"; a.t = 0;
+        }
+      } else if (a.phase === "wait" && a.t > 40) {
+        const pw = a.plane ? a.plane.width : 180;
+        a.phase = "plane"; a.t = 0;
+        a.x = a.dir > 0 ? camX - pw / 2 : camX + W + pw / 2;
+        a.dropX = tg.x;
+        sfx("special", { x: tg.x });
+      } else if (a.phase === "plane") {
+        const pw = a.plane ? a.plane.width : 180;
+        a.x += 6 * a.dir;
+        if (tg.held && (a.x - a.dropX) * a.dir >= 0) {
+          tg.held = false; tg.x = clamp(a.x, 18, this.stageWidth - 18);
+          tg.y = 85; tg.vy = 0; tg.vx = 0;  // just under the plane
+          tg.setState("hit"); tg.stunFor = 999;  // tumble until landing
+          a.falling = true;
+        }
+        if (a.falling && tg.y <= 0) {
+          a.falling = false;
+          tg.setState("idle");  // so receive() starts a fresh hit
+          tg.receive(a.owner, a.owner.stats.special_damage * 1.6, this, { hitstun: 40, push: 1, unblockable: true });
+          sfx("slam", { x: tg.x });
+          this.shake = 14;
+        }
+        if (!tg.held && !a.falling && (a.dir > 0 ? a.x - pw / 2 > camX + W : a.x + pw / 2 < camX)) a.done = true;
+      }
+    }
+    this.abducts = this.abducts.filter(a => !a.done);
+  }
+
+  drawVehicle(ctx, a, img, top, camX) {
+    const w = img ? img.width : 150, h = img ? img.height : 60;
+    ctx.save();
+    ctx.translate(Math.round(a.x - camX), top ?? GROUND - h + 2);
+    if (a.dir < 0) ctx.scale(-1, 1);  // props are drawn facing right
+    if (img) ctx.drawImage(img, -w / 2, 0);
+    else { ctx.fillStyle = "#ddd"; ctx.fillRect(-w / 2, 0, w, h); }
+    ctx.restore();
+  }
+
+  // Slideshow specials: a giant projected presentation fills the screen; the opponent, unless
+  // blocking, is bored stiff (a sleepy stun).
+  spawnSlideshow(owner, target, sp) {
+    this.slideshows.push({ owner, target, sp, t: 0, slide: 3 + Math.floor(Math.random() * 9), total: 180 + Math.floor(Math.random() * 300) });
+    sfx("special", { x: owner.x });
+  }
+
+  updateSlideshows() {
+    for (const s of this.slideshows) {
+      s.t++;
+      if (s.t % 22 === 0) s.slide++;
+      if (s.t === 30 && this.phase === "fight") {
+        s.target.receive(s.owner, s.owner.stats.special_damage * 0.5, this, { stun: STUN_TICKS, push: 0 });
+        if (s.target.state === "dizzy") { s.target.sleepy = true; s.target.shout = { text: "zzz...", t: 70 }; }
+      }
+      if (s.t > 100 || s.owner.state !== s.sp.id) s.done = true;
+    }
+    this.slideshows = this.slideshows.filter(s => !s.done);
+  }
+
+  drawSlideshows(ctx) {
+    for (const s of this.slideshows) {
+      const a = Math.min(1, s.t / 8, (100 - s.t) / 8);
+      const x = 46, y = 34, w = W - 92, h = 112, seed = s.slide * 7;
+      ctx.globalAlpha = a * 0.92;
+      ctx.fillStyle = "#1a1a24"; ctx.fillRect(x - 3, y - 3, w + 6, h + 6);   // screen frame
+      ctx.fillStyle = "#f6f7fb"; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = "#2b4c9a"; ctx.fillRect(x, y, w, 14);                   // title bar
+      ctx.font = `6px ${FONT}`; ctx.textAlign = "left"; ctx.fillStyle = "#fff";
+      const titles = ["Q3 SYNERGY METRICS", "APPENDIX F (CONT.)", "KPI DEEP DIVE", "LESSONS LEARNED", "BUDGET VARIANCE"];
+      ctx.fillText(titles[s.slide % titles.length], x + 5, y + 10);
+      // a bar chart and some bullet points, different every slide
+      for (let i = 0; i < 7; i++) {
+        const bh = 12 + ((seed * (i + 3) * 37) % 50);
+        ctx.fillStyle = ["#4a7bd8", "#e0763a", "#46a86a"][i % 3];
+        ctx.fillRect(x + 10 + i * 13, y + h - 12 - bh, 9, bh);
+      }
+      ctx.fillStyle = "#555"; ctx.fillRect(x + 8, y + h - 11, 96, 1);
+      ctx.fillStyle = "#333";
+      for (let i = 0; i < 6; i++) {
+        ctx.fillRect(x + 118, y + 24 + i * 13, 3, 3);
+        ctx.fillRect(x + 125, y + 25 + i * 13, 60 + ((seed + i * 29) % 90), 1);
+      }
+      ctx.fillStyle = "#777"; ctx.textAlign = "right";
+      ctx.fillText(`${s.slide} / ${s.total}`, x + w - 4, y + h - 4);
+      // the laser pointer wandering over it
+      const lx = x + w / 2 + Math.sin(s.t * 0.13) * w * 0.4, ly = y + h / 2 + Math.sin(s.t * 0.21) * h * 0.35;
+      ctx.fillStyle = "rgba(255,0,0,0.35)"; ctx.fillRect(Math.round(lx) - 2, Math.round(ly) - 2, 5, 5);
+      ctx.fillStyle = "#ff2020"; ctx.fillRect(Math.round(lx) - 1, Math.round(ly) - 1, 3, 3);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Rain specials: the prop (a cup) is tossed off the top of the screen, bursts, and its contents
+  // rain down over the whole screen, hurting the opponent (block standing; it comes from above).
+  spawnRain(owner, target, sp) {
+    this.rains.push({ owner, target, sp, img: owner.char.props[sp.id], t: 0, drops: [], hits: 0, lastHit: -99,
+                      cupX: owner.x + owner.facing * 10, cupY: GROUND - 120 });
+    sfx("throw", { x: owner.x });
+  }
+
+  updateRains() {
+    const camX = this.camX();
+    for (const r of this.rains) {
+      r.t++;
+      if (r.t < 24) r.cupY -= 7;  // the cup flies up out of view
+      const raining = r.t >= 34 && r.t < 120;
+      if (raining) for (let i = 0; i < 9; i++) {
+        r.drops.push({ x: camX + Math.random() * W, y: -Math.random() * 20, vy: 4.5 + Math.random() * 3, len: 5 + Math.floor(Math.random() * 6) });
+      }
+      for (const d of r.drops) d.y += d.vy;
+      r.drops = r.drops.filter(d => d.y < GROUND);
+      const box = r.target.hurtBox();
+      if (raining && this.phase === "fight" && r.hits < 4 && r.t - r.lastHit > 16 &&
+          r.drops.some(d => d.x >= box.x && d.x <= box.x + box.w && d.y >= box.y && d.y <= box.y + 12)) {
+        r.hits++; r.lastHit = r.t;
+        r.target.receive(r.owner, r.owner.stats.special_damage * 0.4, this, { hitstun: 12, push: 0.5, level: "high" });
+      }
+      if (r.t >= 120 && !r.drops.length) r.done = true;
+    }
+    this.rains = this.rains.filter(r => !r.done);
+  }
+
+  drawRains(ctx, camX) {
+    for (const r of this.rains) {
+      if (r.t < 24 && r.img) {  // tossed cup going up
+        ctx.save(); ctx.translate(Math.round(r.cupX - camX), Math.round(r.cupY)); ctx.rotate(r.t * 0.4);
+        ctx.drawImage(r.img, -r.img.width / 2, -r.img.height / 2); ctx.restore();
+      }
+      if (r.t >= 30 && r.t < 50 && r.img) {  // it bursts at the top of the screen
+        const k = (r.t - 30) / 20, sz = 1 + k * 1.5;
+        ctx.globalAlpha = 1 - k;
+        ctx.drawImage(r.img, W / 2 - r.img.width * sz / 2, 6, r.img.width * sz, r.img.height * sz);
+        ctx.globalAlpha = 1;
+      }
+      for (const d of r.drops) {
+        const x = Math.round(d.x - camX), y = Math.round(d.y);
+        ctx.fillStyle = "#2a1408"; ctx.fillRect(x - 1, y, 3, d.len + 1);
+        ctx.fillStyle = "#8a5228"; ctx.fillRect(x, y, 1, d.len);
+        if (d.y + d.vy >= GROUND) { ctx.fillStyle = "#6b4226"; ctx.fillRect(x - 2, GROUND - 1, 6, 1); }  // splash
+      }
+    }
+  }
+
+  // Bind specials: the prop (a strip of tape) shoots along the ground; if it catches the
+  // opponent's feet their legs are bound: slow hops, no jumping. Jump it, or block it crouching.
+  spawnTape(owner, sp) {
+    const img = owner.char.props[sp.id];
+    const w = img ? img.width : 60, h = img ? Math.min(img.height, 26) : 14;
+    this.tapes.push({ owner, img, w, h, dir: owner.facing, x: owner.x + owner.facing * 30, start: owner.x, t: 0 });
+    sfx("throw", { x: owner.x });
+  }
+
+  updateTapes() {
+    for (const tp of this.tapes) {
+      tp.t++;
+      tp.x += 6.5 * tp.dir;
+      const target = tp.owner === this.p1 ? this.p2 : this.p1;
+      const box = { x: tp.x - tp.w / 2, y: GROUND - tp.h, w: tp.w, h: tp.h };
+      if (this.phase === "fight" && overlap(box, target.hurtBox())) {
+        tp.done = true;
+        target.receive(tp.owner, tp.owner.stats.special_damage * 0.4, this, { hitstun: 10, push: 0.5, level: "low" });
+        if (target.state !== "crouch_block" && target.state !== "ko") {
+          target.bound = 180;  // three seconds
+          target.shout = { text: "TAPED!", t: 70 };
+        }
+      }
+      if (Math.abs(tp.x - tp.start) > 230) tp.done = true;
+    }
+    this.tapes = this.tapes.filter(tp => !tp.done);
   }
 
   // Stun specials: the prop drops onto the opponent (or a flash when there's no prop image).
@@ -820,7 +1459,10 @@ class Match {
     ctx.save();
     ctx.translate(0, shakeY);
     ctx.drawImage(this.arenaImg, -camX, 0, this.arenaImg.width, H);
+    for (const a of this.abducts) if (a.phase === "plane") this.drawVehicle(ctx, a, a.plane, 34, camX);  // behind the faller
+    this.drawSlideshows(ctx);
     for (const f of [p2, p1]) f.draw(ctx, camX);
+    this.drawRains(ctx, camX);
 
     for (const p of this.projectiles) {
       ctx.save();
@@ -828,6 +1470,56 @@ class Match {
       ctx.rotate(p.angle * Math.sign(p.vx));
       if (p.img) ctx.drawImage(p.img, -p.w / 2, -p.h / 2);
       else { ctx.fillStyle = "#b07a3a"; ctx.fillRect(-12, -12, 24, 24); ctx.strokeStyle = "#000"; ctx.strokeRect(-12, -12, 24, 24); }
+      ctx.restore();
+    }
+    for (const tp of this.tapes) {
+      ctx.save();
+      ctx.translate(Math.round(tp.x - this.camX()), GROUND - tp.h + 1);
+      if (tp.dir < 0) ctx.scale(-1, 1);
+      if (tp.img) ctx.drawImage(tp.img, -tp.w / 2, 0, tp.w, tp.h);
+      else { ctx.fillStyle = "#b8bcc2"; ctx.fillRect(-tp.w / 2, 0, tp.w, tp.h); }
+      ctx.restore();
+    }
+    for (const a of this.abducts) if (a.phase === "car") {
+      this.drawVehicle(ctx, a, a.car, null, camX);
+      const w = a.car ? a.car.width : 150, h = a.car ? a.car.height : 70;
+      const sx = Math.round(a.x - camX + a.dir * w * 0.07), sy = Math.round(GROUND - h + 2 + h * 0.28);
+      ctx.fillStyle = "rgba(120,220,255,0.35)"; ctx.fillRect(sx - 17, sy - 7, 34, 14);  // glow
+      ctx.fillStyle = "#000"; ctx.fillRect(sx - 15, sy - 5, 30, 10);
+      ctx.strokeStyle = "#7df"; ctx.lineWidth = 1; ctx.strokeRect(sx - 14.5, sy - 4.5, 29, 9);
+      ctx.font = `6px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillStyle = "#fff"; ctx.fillText("UBER", sx, sy + 1);
+      ctx.textBaseline = "alphabetic";
+    }
+    for (const g of this.glitter) {
+      const x = Math.round(g.x - camX), y = Math.round(g.y);
+      ctx.globalAlpha = 1 - g.t / 26;
+      ctx.fillStyle = ["#fff", "#ffe066", "#ff8cf0", "#8cf4ff"][(g.t + Math.round(g.x)) % 4];
+      if (g.t % 6 < 3) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); }  // twinkle
+      else ctx.fillRect(x, y, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    for (const p of this.puffs) {  // teleport particles
+      for (let i = 0; i < 18; i++) {
+        const ang = i * 2.4 + p.x, r = p.t * (1.2 + (i % 5) * 0.5);
+        ctx.fillStyle = ["#5ff", "#f6f", "#ff6", "#fff"][i % 4];
+        ctx.globalAlpha = 1 - p.t / 30;
+        ctx.fillRect(Math.round(p.x - camX + Math.cos(ang) * r), Math.round(p.y + Math.sin(ang) * r * 1.6), 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
+    for (const c of this.charges) {
+      const x = Math.round(c.x - camX), top = GROUND - c.h + 2;
+      ctx.fillStyle = "rgba(255,255,255,0.55)";  // speed lines trailing behind
+      for (let i = 0; i < 5; i++) {
+        const len = 20 + ((i * 37 + this.phaseT * 3) % 40);
+        ctx.fillRect(x - c.dir * (c.w / 2 + 6) - (c.dir > 0 ? len : 0), top + c.h * (0.2 + i * 0.15), len, 2);
+      }
+      ctx.save();
+      ctx.translate(x, top);
+      if (c.dir < 0) ctx.scale(-1, 1);  // props are drawn facing right
+      if (c.img) ctx.drawImage(c.img, -c.w / 2, 0);
+      else { ctx.fillStyle = "#ddd"; ctx.fillRect(-c.w / 2, 0, c.w, c.h); }
       ctx.restore();
     }
     for (const d of this.drops) {
