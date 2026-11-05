@@ -36,3 +36,6 @@ source "$_UNK_DIR/.venv/bin/activate"
 echo "unk: keys loaded from *_key.txt, venv active ($(python --version 2>&1))"
 
 unset _UNK_DIR
+
+export UNK_HOSTNAME=docent.ncsa.illinois.edu
+export ACME_EMAIL=mchenry@illinois.edu
