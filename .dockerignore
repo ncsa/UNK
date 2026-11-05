@@ -7,13 +7,12 @@ setup.sh
 # High scores live in data/, which is mounted so they survive rebuilds.
 data/
 
-# Generation caches the server doesn't read: raw Gemini frames (the built sheets in
-# build/characters are what's served), raw ElevenLabs audio, audition reels.
-Characters/*/frames/
+# Generation caches the server doesn't read: raw ElevenLabs audio, audition reels.
+# (Characters/*/frames stay: the image builds the sprite sheets from them, then drops them.)
 Sounds/raw/
 Sounds/audition/
-# Arena copies are rebuilt on demand from Arenas/ and Characters/*/Arena_*.
-build/arenas/
+# Local builds: the image makes its own sheets, and arenas are rebuilt on demand.
+build/
 
 # Working material the game doesn't serve.
 Images/
@@ -21,10 +20,10 @@ Misc/
 Prompts.txt
 SplastScreen.jpeg
 
-# Asset tools run on your machine, not in the container.
-add_character.py
+# The asset tools run on your machine. (add_character.py and requirements.txt are needed
+# to build the sheets; the Dockerfile removes them from the final image.)
 make_sounds.py
-requirements.txt
+check_gemini.py
 
 # Python / venv / build cruft.
 __pycache__/

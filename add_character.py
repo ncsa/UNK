@@ -1217,7 +1217,12 @@ def main():
         folder = folder.resolve()
         log(f"[{folder.name}]")
         try:
-            char = stage_parse(folder, args.reparse)
+            built = folder / "character.json"
+            if args.stage == "sheet" and built.exists() and not args.reparse:
+                # Sheets only: use the parsed profile as is (no API key needed, e.g. in Docker).
+                char = json.loads(built.read_text())
+            else:
+                char = stage_parse(folder, args.reparse)
         except NotReady as e:
             log(f"  skipped: {e}")
             continue

@@ -10,13 +10,16 @@
 
 ## What's in the image, and what isn't
 
-The image carries the code and the built game: sprite sheets (`build/characters`),
-arenas, character music, sound effects, the splash video and the selection music.
+The image carries the code and the built game: sprite sheets, arenas, character music,
+sound effects, the splash video and the selection music. `docker build` makes the sprite
+sheets itself from the frames in `Characters/*/frames` (no API calls), so the host needs
+nothing but Docker: no Python, no `setup.sh`, no keys. Your local `build/` folder is ignored.
 
 Two things are **mounted** instead, so they survive rebuilds and never end up in the image:
 
 - `users.csv`: the logins, `username,password,character` per line. The last item is the fighter
   that user always plays (e.g. `Tonian` or `The Koop`); players only choose their opponent.
+  The first account in the file may pick any fighter.
 - `data/`: the high-score database (`data/scores.db`). Back this folder up.
 
 The server needs **no API keys**. Gemini and ElevenLabs are only used by
@@ -64,8 +67,10 @@ flowchart LR
 
 - A server with Docker + Compose, reachable from the internet on ports **80 and 443**.
 - A DNS **A/AAAA record** for the hostname pointing at that server.
-- This folder copied to the server, with `users.csv` (it isn't in the image). For
-  example: `rsync -av --exclude .venv --exclude 'Characters/*/frames' --exclude Sounds/raw ./ <server>:unk/`
+- This folder copied to the server (a `git clone` works), **including `Characters/*/frames`**:
+  the image builds the sprite sheets from them. Plus `users.csv`, which isn't in git or the
+  image. For example: `rsync -av --exclude .venv --exclude build --exclude Sounds/raw ./ <server>:unk/`
+- No Python needed on the server, so don't run `setup.sh` there.
 
 ### Deploy
 
