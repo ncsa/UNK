@@ -5,8 +5,8 @@ users.csv lines are  username,password,character : the last item is the fighter 
 always plays (a character's name or folder, e.g. Tonian or The Koop). Players only choose
 their opponent, except the first account in the file (the admin), who may pick any fighter.
 
-    source setup.sh
-    ./server.py                 # http://localhost:8000
+    python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # once
+    .venv/bin/python server.py                 # http://localhost:8000
     ./server.py --port 9000 --host 0.0.0.0
 
 Characters appear once add_character.py has built them into build/characters/.

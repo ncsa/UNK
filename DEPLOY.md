@@ -6,14 +6,14 @@
 |---|---|---|
 | Try it on my own computer | **Local** (below) | `http://localhost:8000` |
 | Put it on a server for others | **Server with HTTPS** (below) | `https://<your hostname>` |
-| Put it on the server that already runs docent | **Alongside docent** (below) | `https://<docent hostname>:5004` |
+| Put it on the server that already runs docent | **Alongside docent** (below) | `https://<docent hostname>:8000` |
 
 ## What's in the image, and what isn't
 
 The image carries the code and the built game: sprite sheets, arenas, character music,
 sound effects, the splash video and the selection music. `docker build` makes the sprite
 sheets itself from the frames in `Characters/*/frames` (no API calls), so the host needs
-nothing but Docker: no Python, no `setup.sh`, no keys. Your local `build/` folder is ignored.
+nothing but Docker: no Python, no keys. Your local `build/` folder is ignored.
 
 Two things are **mounted** instead, so they survive rebuilds and never end up in the image:
 
@@ -70,7 +70,7 @@ flowchart LR
 - This folder copied to the server (a `git clone` works), **including `Characters/*/frames`**:
   the image builds the sprite sheets from them. Plus `users.csv`, which isn't in git or the
   image. For example: `rsync -av --exclude .venv --exclude build --exclude Sounds/raw ./ <server>:unk/`
-- No Python needed on the server, so don't run `setup.sh` there.
+- No Python needed on the server. `source setup.sh` only sets `UNK_HOSTNAME` and `ACME_EMAIL`.
 
 ### Deploy
 
@@ -101,17 +101,18 @@ docent's `docker-compose.multi.yml` already runs a Traefik that owns ports 80 an
 so a second Traefik can't start on that server. Instead, add the game to docent's file
 as another service on its own port; docent's one certificate covers every port.
 
-In docent's `docker-compose.multi.yml`, add an entrypoint and port to the `traefik` service:
+In docent's `docker-compose.multi.yml`, add an entrypoint and port to the `traefik` service. (Port 8000 here is Traefik's public
+HTTPS port; the game's own port 8000 stays private inside Docker's network, so they don't clash.)
 
 ```yaml
-      - --entrypoints.unk.address=:5004       # in traefik's command
-      - "5004:5004"                           # in traefik's ports
+      - --entrypoints.unk.address=:8000       # in traefik's command
+      - "8000:8000"                           # in traefik's ports
 ```
 
 and this service (adjust `context` to where this folder lives on the server):
 
 ```yaml
-  unk:                          # UNK Fighter  ->  https://${DOCENT_HOSTNAME}:5004
+  unk:                          # UNK Fighter  ->  https://${DOCENT_HOSTNAME}:8000
     build: ../UNK
     image: unk-fighter:latest
     expose: ["8000"]
@@ -121,14 +122,15 @@ and this service (adjust `context` to where this folder lives on the server):
     labels:
       - traefik.enable=true
       - traefik.http.routers.unk.rule=Host(`${DOCENT_HOSTNAME:?set DOCENT_HOSTNAME}`)
-      - traefik.http.routers.unk.entrypoints=unk          # port 5004
+      - traefik.http.routers.unk.entrypoints=unk          # port 8000
       - traefik.http.routers.unk.tls.certresolver=le
       - traefik.http.services.unk.loadbalancer.server.port=8000
     restart: unless-stopped
 ```
 
-Open port 5004 on the server, then redeploy docent as usual. The game is at
-`https://$DOCENT_HOSTNAME:5004`.
+Open port 8000 on the server, then redeploy docent as usual. Don't also run this folder's
+`start.sh` or `docker compose up` on that server: docent's file now runs the game. The game is at
+`https://$DOCENT_HOSTNAME:8000`.
 
 ## Knobs
 

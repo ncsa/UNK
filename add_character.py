@@ -60,7 +60,7 @@ from scipy import ndimage
 
 ROOT = Path(__file__).resolve().parent
 
-# gemini_key.txt is the single source of truth for the key (setup.sh exports the same file).
+# gemini_key.txt is the single source of truth for the key.
 if not os.environ.get("GEMINI_API_KEY") and (ROOT / "gemini_key.txt").exists():
     os.environ["GEMINI_API_KEY"] = (ROOT / "gemini_key.txt").read_text().strip()
 
