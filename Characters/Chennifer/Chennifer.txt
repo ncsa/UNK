@@ -1,12 +1,8 @@
 Chennifer — The Hyperactive Sweetheart
 Chennifer is sweet, cheerful, and full of chaotic energy. Usually very nice and friendly, but rarely stays still for long. Frequently spotted running down hallways at suspicious speeds for absolutely no reason. Loves cats, good food, and exploring new things. Mostly harmless, unless someone tests her limit.  Weakness: Easily distracted, occasionally overcommits, and has absolutely no concept of walking when running is an option.
 
-Health: 150
-Strength: 120
-Defense: 150
-
 Special moves:
-- Hallway Zoomies — Suddenly sprints across the battlefield at ridiculous speed, knocking over everyone in her path. Nobody knows where she’s going, including herself. Triggered with S, S, D, left click.
-- Tiny Fury — After too much nonsense, unleashes a rapid series of tiny punches while shouting “BUT WHYYYY?” Damage increases with frustration.  Triggered with D, D, D, left click.
-- Cat Mode — Abruptly abandons the fight to chase something interesting, eat a snack, or pet a cat. Restores health but completely forgets what she was doing.  Triggered with W, S, W, S, left click.
-- Ultimate move: UNSTOPPABLE ZOOMIES — Runs through every hallway on the map at maximum speed, creating a miniature tornado that sends enemies, furniture, and loose paperwork flying.  Triggered with S, S, S, S, D, D, left click.
+- Hallway Zoomies — Suddenly sprints across the battlefield at ridiculous speed, knocking over everyone in her path. Nobody knows where she’s going, including herself.
+- Tiny Fury — After too much nonsense, unleashes a rapid series of tiny punches while shouting “BUT WHYYYY?” Damage increases with frustration.
+- Cat Mode — Abruptly abandons the fight to chase something interesting, eat a snack, or pet a cat. Restores health but completely forgets what she was doing.
+- Ultimate move: UNSTOPPABLE ZOOMIES — Runs through every hallway on the map at maximum speed, creating a miniature tornado that sends enemies, furniture, and loose paperwork flying.

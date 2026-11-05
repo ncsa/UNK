@@ -1,9 +1,5 @@
 Tonian is arrogant, sassy, and mischievous.  He mixes punches and kicks, jumping occasionally.
 
-Health: 100
-Strength: 100
-Defense: 100
-
 Special moves:
-- Giant denied stamp, he brings out an enormous DENIED stamp and stomps the other character with it, yelling out "DENIED!!".  Triggered with the sequence W, W, left click.
-- You are mean to me twirl, he spins with fists out causing multiple punches to hit nearby enemies, yelling out "why are you so mean to me!" Triggered with the sequence A, D, A, D, left click.
+- Giant denied stamp, he brings out an enormous DENIED stamp and stomps the other character with it, yelling out "DENIED!!".
+- You are mean to me twirl, he spins with fists out causing multiple punches to hit nearby enemies, yelling out "why are you so mean to me!".

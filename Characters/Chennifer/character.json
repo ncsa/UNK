@@ -7,7 +7,9 @@
     "image": "Chennifer.jpeg",
     "health": 150,
     "strength": 120,
-    "defense": 150
+    "defense": 150,
+    "text_hash": "16096b7f66b5",
+    "parsed_text": "Chennifer — The Hyperactive Sweetheart\nChennifer is sweet, cheerful, and full of chaotic energy. Usually very nice and friendly, but rarely stays still for long. Frequently spotted running down hallways at suspicious speeds for absolutely no reason. Loves cats, good food, and exploring new things. Mostly harmless, unless someone tests her limit.  Weakness: Easily distracted, occasionally overcommits, and has absolutely no concept of walking when running is an option.\n\nSpecial moves:\n- Hallway Zoomies — Suddenly sprints across the battlefield at ridiculous speed, knocking over everyone in her path. Nobody knows where she’s going, including herself.\n- Tiny Fury — After too much nonsense, unleashes a rapid series of tiny punches while shouting “BUT WHYYYY?” Damage increases with frustration.\n- Cat Mode — Abruptly abandons the fight to chase something interesting, eat a snack, or pet a cat. Restores health but completely forgets what she was doing.\n- Ultimate move: UNSTOPPABLE ZOOMIES — Runs through every hallway on the map at maximum speed, creating a miniature tornado that sends enemies, furniture, and loose paperwork flying."
   },
   "stats": {
     "health": 150,

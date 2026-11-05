@@ -95,7 +95,7 @@ ANIMATIONS = {
         ("walking forward in fighting stance, front leg stepping forward, fists up", "idle"),
         ("walking forward in fighting stance, back leg passing the front leg, fists up", "idle"),
     ]),
-    "crouch": dict(fps=1, loop=False, fit=("idle", 0.55, 1.0), frames=[
+    "crouch": dict(fps=1, loop=False, fit=("h", 0.9), hurt_h=0.6, frames=[
         # Spelled out as body geometry: vaguer prompts came back standing or only slightly bent.
         ("LOW FIGHTING CROUCH as in Street Fighter II (hold down): a deep squat with the hips dropped "
          "almost to knee level, thighs horizontal, knees bent past 90 degrees and pushed forward, feet "
@@ -121,6 +121,44 @@ ANIMATIONS = {
     ]),
     "block": dict(fps=1, loop=False, fit=("h", 0.95), frames=[
         ("blocking, both forearms raised and crossed in front of the face, braced", "hit"),
+    ]),
+    # Extended move set. optional: a character built before these existed still gets a sheet,
+    # and the game stands in the nearest basic animation (static/game.js FALLBACK_ANIMS).
+    "crouch_block": dict(fps=1, loop=False, fit=("h", 0.9), hurt_h=0.6, optional=True, frames=[
+        ("BLOCKING WHILE CROUCHING, in a DEEP LOW SQUAT like a Street Fighter II crouch: hips dropped almost to knee level, thighs horizontal, knees bent past 90 degrees, feet flat and wide apart, torso hunched forward, head no higher than a standing person's chest. The figure's total height is only about 60% of its standing height, and it is wider than it is tall from the waist down. Both forearms raised and crossed in front of the face, "
+         "braced", "hit"),
+    ]),
+    "crouch_punch": dict(fps=12, loop=False, fit=("h", 0.9), hurt_h=0.6, active=[1], optional=True, frames=[
+        ("CROUCHING PUNCH windup, in a DEEP LOW SQUAT like a Street Fighter II crouch: hips dropped almost to knee level, thighs horizontal, knees bent past 90 degrees, feet flat and wide apart, torso hunched forward, head no higher than a standing person's chest. The figure's total height is only about 60% of its standing height, and it is wider than it is tall from the waist down. Rear fist pulled back by the shoulder", "attack"),
+        ("CROUCHING PUNCH, still in a DEEP LOW SQUAT like a Street Fighter II crouch: hips dropped almost to knee level, thighs horizontal, knees bent past 90 degrees, feet flat and wide apart, torso hunched forward, head no higher than a standing person's chest. The figure's total height is only about 60% of its standing height, and it is wider than it is tall from the waist down. One arm fully extended straight forward to the right at "
+         "shoulder height of the squat", "attack"),
+    ]),
+    "crouch_kick": dict(fps=10, loop=False, fit=("h", 0.7), hurt_h=0.55, active=[1], optional=True, frames=[
+        ("LOW SWEEP windup: squatting very low on ONE bent leg, the other leg drawn in with its foot near "
+         "the ground, one hand touching the floor for balance. Exactly two legs. The figure's total height "
+         "is only about 55% of its standing height", "attack"),
+        ("LOW SWEEP KICK along the floor: squatting very low on ONE bent supporting leg, the OTHER leg fully "
+         "extended straight forward to the right, flat along the ground at ankle height, one hand on the "
+         "floor. Same clothes as the reference, jacket closed. Exactly two legs in total, both attached at the hips. The figure is much wider than it "
+         "is tall, its total height only about half its standing height", "attack"),
+    ]),
+    "jump_punch": dict(fps=12, loop=False, fit=("idle", 0.5, 1.0), active=[1], optional=True, frames=[
+        ("in mid-air during a jump, knees tucked up, one fist pulled back ready to strike", "attack"),
+        ("JUMPING PUNCH in mid-air: knees tucked up, body leaning forward, one arm fully extended forward "
+         "and angled down to the right, striking downward. Both feet off the ground", "attack"),
+    ]),
+    "jump_kick": dict(fps=10, loop=False, fit=("idle", 0.5, 1.0), active=[1], optional=True, frames=[
+        ("in mid-air during a jump, both knees tucked up toward the chest, about to kick. Exactly two legs, "
+         "both feet off the ground", "attack"),
+        ("FLYING JUMP KICK in mid-air: ONE leg fully extended forward and slightly down to the right, the "
+         "OTHER leg bent and tucked under the body, arms up for balance. Exactly two legs in total, both "
+         "attached at the hips, both feet off the ground", "attack"),
+    ]),
+    "dive_kick": dict(fps=1, loop=False, fit=("idle", 0.5, 1.0), active=[0], optional=True, frames=[
+        ("DIVE KICK in mid-air, plunging DOWNWARD at a steep diagonal: body angled down to the right, ONE "
+         "leg fully extended down and forward toward the ground at the lower right (the foot is the lowest "
+         "point), the OTHER leg bent back, arms up behind. Exactly two legs in total, both attached at the "
+         "hips, nothing touching the ground", "attack"),
     ]),
     "hit": dict(fps=6, loop=False, fit=("h", 0.95), frames=[
         ("recoiling from a hit, head snapped back, body leaning away to the left", "hit"),
@@ -418,7 +456,10 @@ def generate_image(prompt, refs, attempts=3):
             for part in (resp.candidates[0].content.parts if resp.candidates else []) or []:
                 if part.inline_data and part.inline_data.data:
                     return Image.open(io.BytesIO(part.inline_data.data)).convert("RGB")
-            log(f"    no image returned (attempt {attempt})")
+            cand = resp.candidates[0] if resp.candidates else None
+            why = getattr(cand, "finish_reason", None) or getattr(resp.prompt_feedback, "block_reason", None)
+            msg = getattr(cand, "finish_message", None) or ""
+            log(f"    no image returned (attempt {attempt}): {why} {msg}".rstrip())
         except Exception as e:  # network errors, rate limits, safety blocks
             if "RESOURCE_EXHAUSTED" in str(e) and "limit: 0" in str(e):
                 sys.exit(f"{IMAGE_MODEL} has no quota for this API key (free tier keys can't generate "
@@ -443,6 +484,14 @@ def check_arms(kind):
     """Whether to count arms: not for special moves (blurred multiple fists are often the point)
     or a body lying on its side (the far arm is usually hidden)."""
     return kind != "ko" and not kind.startswith("special")
+
+
+def shape_problems(kind, img, idle_img):
+    """Pose checks a vision model can't be trusted with: a body lying down really is wide.
+    (Height can't be checked this way: every pose is drawn filling the picture, a squat included.)"""
+    if kind == "ko" and (shape := lying_shape(img)) < 1.8:
+        return [f"not lying down ({shape:.1f}x as wide as tall)"]
+    return []
 
 
 def lying_shape(img):
@@ -769,6 +818,9 @@ def stage_frames(folder, char, only, force, check=False):
     placeholders = read_placeholders(frames_dir)
     made = read_made(frames_dir)
     plan = frame_plan(char)
+    idle_path = frames_dir / "idle_0.png"
+    idle_img = lambda: (Image.open(idle_path).convert("RGB")
+                        if idle_path.exists() and "idle_0" not in placeholders else None)
     for stem, kind, data in plan:
         path = frames_dir / f"{stem}.png"
         selected = not only or kind in only or stem in only
@@ -780,8 +832,7 @@ def stage_frames(folder, char, only, force, check=False):
         if selected and cached and check and kind not in ("prop", "portrait"):
             cached_img = Image.open(path).convert("RGB")
             problems = anatomy_problems(cached_img, data["pose"], check_arms(kind))
-            if kind == "ko" and (shape := lying_shape(cached_img)) < 1.8:
-                problems.append(f"not lying down ({shape:.1f}x as wide as tall)")
+            problems += shape_problems(kind, cached_img, idle_img())
             if problems:
                 log(f"  frames: {stem} has {', '.join(problems)}")
                 cached = False
@@ -822,8 +873,7 @@ def stage_frames(folder, char, only, force, check=False):
             if kind in ("prop", "portrait"):
                 break
             problems = anatomy_problems(img, data["pose"], check_arms(kind))
-            if kind == "ko" and (shape := lying_shape(img)) < 1.8:
-                problems.append(f"not lying down ({shape:.1f}x as wide as tall)")
+            problems += shape_problems(kind, img, idle_img())
             if not problems:
                 break
             log(f"    {', '.join(problems)}; " + ("trying again" if attempt < ANATOMY_TRIES
@@ -1019,7 +1069,7 @@ def apply_palette(img, palette):
     return q
 
 
-def frame_geometry(img, idle_reach, active, lying=False):
+def frame_geometry(img, idle_reach, active, lying=False, hurt_h=None):
     """Anchor = feet (center of the lowest opaque rows); boxes are relative to the anchor.
     lying: a body on the ground is drawn in slight perspective, its feet or a hand reaching a few
     pixels below the rest, so anchoring at the lowest pixel left it hovering. Rest it on the
@@ -1034,6 +1084,9 @@ def frame_geometry(img, idle_reach, active, lying=False):
         bottoms = [np.nonzero(a[:, x])[0].max() + 1 for x in range(w) if a[:, x].any()]
         ay = int(np.median(bottoms))
     hurt = [int(-w * 0.35), -h, int(w * 0.7), h]
+    if hurt_h:  # crouches: drawn near full size, but only this fraction of standing height can be hit
+        top = min(h, int(SPRITE_HEIGHT * hurt_h))
+        hurt = [hurt[0], -top, hurt[2], top]
     geo = {"ax": ax, "ay": ay, "hurt": hurt, "hit": None}
     if active:
         reach = w - ax
@@ -1084,6 +1137,9 @@ def stage_sheet(folder, char):
     processed = {}
     for name, spec in anims.items():
         imgs = []
+        if spec.get("optional") and not all((frames_dir / f"{name}_{i}.png").exists()
+                                            for i in range(len(spec["frames"]))):
+            continue  # not generated yet for this character: the game stands in a basic animation
         for i in range(len(spec["frames"])):
             p = frames_dir / f"{name}_{i}.png"
             if not p.exists():
@@ -1101,7 +1157,8 @@ def stage_sheet(folder, char):
         meta[name] = {"fps": spec["fps"], "loop": spec["loop"], "active": spec.get("active", []), "frames": []}
         for i, im in enumerate(imgs):
             im = apply_palette(im, palette)
-            order.append((name, im, frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko")))
+            order.append((name, im, frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko",
+                                                     spec.get("hurt_h"))))
     sheet, rects = pack([im for _, im, _ in order])
     for (name, _, geo), (x, y, w, h) in zip(order, rects):
         meta[name]["frames"].append({"x": x, "y": y, "w": w, "h": h, **geo})

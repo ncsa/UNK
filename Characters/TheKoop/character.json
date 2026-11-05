@@ -1,20 +1,33 @@
 {
   "name": "The Koop",
   "slug": "thekoop",
-  "summary": "The Koop is rude and grumpy. He does mostly punches and jumps rarely.",
+  "summary": "The Koop is rude and grumpy and very strong. He does mostly punches and jumps rarely. His special attack cooldown is twice as fast as others.",
   "source": {
     "text": "TheKoop.txt",
+    "text_hash": "5c33612aa16a",
+    "parsed_text": "The Koop is rude and grumpy and very strong. He does mostly punches and jumps rarely.  His special attack cooldown is twice as fast as others.\n\nSpecial moves:\n- Throws a server box at you, pulls out a giant server box and throws it at you.\n- Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion of the enemy as they check their cell phone, watch, etc.  ",
     "image": "TheKoop.jpeg",
-    "health": 150,
-    "strength": 150,
-    "defense": 150
+    "health": 90,
+    "strength": 130,
+    "defense": 80,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 90,
+      "strength": 130,
+      "defense": 80,
+      "reason": "very strong brute who focuses on heavy punches"
+    }
   },
   "stats": {
-    "health": 150,
-    "punch_damage": 8,
-    "kick_damage": 10,
-    "special_damage": 21,
-    "block": 0.75,
+    "health": 90,
+    "punch_damage": 6,
+    "kick_damage": 9,
+    "special_damage": 18,
+    "block": 0.4,
     "walk_speed": 1.84,
     "jump_power": 5.95
   },
@@ -46,9 +59,10 @@
       "description": "Pulls out a giant server box and throws it at you.",
       "input": [
         "S",
-        "S",
+        "D",
         "LMB"
       ],
+      "input_source": "suggested",
       "effect": "projectile",
       "shout": null,
       "pose_frames": [
@@ -64,10 +78,12 @@
       "name": "Access Revocation",
       "description": "Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion.",
       "input": [
+        "A",
         "S",
-        "D",
-        "LMB"
+        "A",
+        "RMB"
       ],
+      "input_source": "suggested",
       "effect": "stun",
       "shout": null,
       "pose_frames": [
@@ -79,8 +95,5 @@
       "prop_size": 0.2
     }
   ],
-  "warnings": [
-    "Special move 'Access Revocation' had no input sequence specified.",
-    "special2 'Access Revocation' had no usable input; assigned S, D, LMB"
-  ]
+  "warnings": []
 }

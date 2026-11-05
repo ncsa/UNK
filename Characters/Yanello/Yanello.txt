@@ -14,4 +14,5 @@ Special moves:
 # sequence that suits the move is picked for you. To choose your own, end the line with one:
 # directions are relative to the opponent (D toward them, A away, W up, S down), then punch
 # (left click or J) or kick (right click or K). e.g.
-# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!". Triggered with S, D, punch.
+# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!". 
+- Magic wand, pulls out and uses a glittery fairy wand on you to make an uber drive by, pull you in, drive you off to the airport, followed by a plain flying off in the distance with a figure falling out, which is the player, hitting the ground for major damage.

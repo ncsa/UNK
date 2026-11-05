@@ -1,0 +1,100 @@
+{
+  "name": "Marcoos",
+  "slug": "marcoos",
+  "summary": "Marcoos is a quick and versatile fighter who utilizes Wolverine-style claws for devastating uppercuts and harnesses quantum teleportation to instantly reposition himself around opponents.",
+  "source": {
+    "text": "Marcoos.txt",
+    "text_hash": "ba0fe3f279c5",
+    "parsed_text": "Marcoos is ...\n\n\nSpecial moves:\n- Pulls out wolverine type claws and upper cuts you\n- Quantum teleportation moving him to the other side of the player",
+    "image": "Marcoos.jpeg",
+    "health": 90,
+    "strength": 120,
+    "defense": 90,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 90,
+      "strength": 120,
+      "defense": 90,
+      "reason": "High offensive capability with claws balanced by agile quantum mobility."
+    }
+  },
+  "stats": {
+    "health": 90,
+    "punch_damage": 6,
+    "kick_damage": 8,
+    "special_damage": 17,
+    "block": 0.45,
+    "walk_speed": 2.32,
+    "jump_power": 6.85
+  },
+  "ai": {
+    "punch": 0.8,
+    "kick": 0.3,
+    "jump": 0.5,
+    "block": 0.4,
+    "special": 0.8,
+    "aggression": 0.85,
+    "mobility": 0.9
+  },
+  "expressions": {
+    "idle": "focused smirk",
+    "attack": "intense aggressive glare",
+    "hit": "pained grimace",
+    "victory": "triumphant grin"
+  },
+  "victory_pose": "Marcoos retracts his quantum claws with a metallic spark and crosses his arms, looking down at his fallen opponent.",
+  "taunts": [
+    "Now you see me, now you don't!",
+    "Is that the best you've got?",
+    "Step up your game!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Claw Uppercut",
+      "description": "Pulls out wolverine type claws and upper cuts you",
+      "input": [
+        "D",
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "melee",
+      "shout": "Slice!",
+      "pose_frames": [
+        "crouches low, fists pulled back, glowing energy gathering at his knuckles",
+        "leaps upward in a rising uppercut trailing a bright arc of energy"
+      ],
+      "height_ratio": 1.2,
+      "prop": null,
+      "prop_size": 0.5
+    },
+    {
+      "id": "special2",
+      "name": "Quantum Teleportation",
+      "description": "Quantum teleportation moving him to the other side of the player",
+      "input": [
+        "A",
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "stun",
+      "shout": null,
+      "pose_frames": [
+        "crosses arms as blue quantum energy begins to crackle around his body",
+        "dissolves into glowing particles and reappears behind the enemy"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 0.5
+    }
+  ],
+  "warnings": []
+}

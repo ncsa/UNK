@@ -3,7 +3,7 @@
 
 users.csv lines are  username,password,character : the last item is the fighter that user
 always plays (a character's name or folder, e.g. Tonian or The Koop). Players only choose
-their opponent.
+their opponent, except the first account in the file (the admin), who may pick any fighter.
 
     source setup.sh
     ./server.py                 # http://localhost:8000
@@ -88,6 +88,11 @@ def check_auth(header):
     if expected is not None and secrets.compare_digest(expected.encode(), password.encode()):
         return user
     return None
+
+
+def can_choose_any(user):
+    """The first account in users.csv may play any character."""
+    return bool(users()) and user == next(iter(users()))
 
 
 DEV_USER = None  # set by --dev-user: skip the login prompt (loopback only, for local testing)
@@ -343,7 +348,7 @@ def compute_score(result, player, opponent):
 
 @app.post("/api/scores")
 def submit_score(result: MatchResult, request: Request):
-    if result.character != assigned_character(request.state.user)[0]:
+    if result.character != assigned_character(request.state.user)[0] and not can_choose_any(request.state.user):
         raise HTTPException(400, "that isn't your fighter")
     if result.opponent == result.character:
         raise HTTPException(400, "you can't fight yourself")
@@ -391,7 +396,8 @@ def me(request: Request):
     slug, name = assigned_character(request.state.user)
     return {"username": request.state.user, "best": row["best"] or 0,
             "matches": row["matches"], "wins": row["wins"] or 0,
-            "character": slug, "character_name": name}
+            "character": slug, "character_name": name,
+            "choose_any": can_choose_any(request.state.user)}
 
 
 @app.exception_handler(FileNotFoundError)

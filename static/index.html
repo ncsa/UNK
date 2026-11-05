@@ -43,6 +43,7 @@
     width: 150px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
   .card:hover { border-color: var(--dim); }
   .card.selected { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+  .card[hidden] { display: none; }
   .card .portrait { width: 100%; aspect-ratio: 1; background: #000; object-fit: contain; }
   .card .name { font-size: 10px; }
   .card .meta { font-size: 8px; color: var(--dim); line-height: 1.8; }
@@ -115,9 +116,12 @@
       <h2>CONTROLS</h2>
       <div class="controls">
         <b>A / D</b> move · hold back to block<br>
-        <b>W</b> jump · <b>S</b> crouch<br>
+        <b>W</b> jump · <b>S</b> crouch · <b>S</b>+back block low<br>
         <b>J</b> or <b>click</b> punch<br>
         <b>K</b> or <b>right click</b> kick<br>
+        crouch or jump + punch/kick: low &amp; air attacks<br>
+        <b>S</b> + punch/kick in the air: dive kick<br>
+        sweeps: block low · air attacks: block standing<br>
         <b>Esc</b> pause · <b>M</b> music · <b>N</b> sound effects (here or paused)<br>
         SPECIALS (<span class="arrow">→</span> = toward opponent)<br>
         <span id="special-help"></span>

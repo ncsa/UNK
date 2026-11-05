@@ -1,0 +1,99 @@
+{
+  "name": "The Koop",
+  "slug": "thekoop",
+  "summary": "The Koop is rude and grumpy and very strong. He does mostly punches and jumps rarely. His special attack cooldown is twice as fast as others.",
+  "source": {
+    "text": "TheKoop.txt",
+    "text_hash": "5c33612aa16a",
+    "parsed_text": "The Koop is rude and grumpy and very strong. He does mostly punches and jumps rarely.  His special attack cooldown is twice as fast as others.\n\nSpecial moves:\n- Throws a server box at you, pulls out a giant server box and throws it at you.\n- Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion of the enemy as they check their cell phone, watch, etc.  ",
+    "image": "TheKoop.jpeg",
+    "health": 90,
+    "strength": 130,
+    "defense": 80,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 90,
+      "strength": 130,
+      "defense": 80,
+      "reason": "very strong brute who focuses on heavy punches"
+    }
+  },
+  "stats": {
+    "health": 90,
+    "punch_damage": 6,
+    "kick_damage": 9,
+    "special_damage": 18,
+    "block": 0.4,
+    "walk_speed": 1.84,
+    "jump_power": 5.95
+  },
+  "ai": {
+    "punch": 0.8,
+    "kick": 0.2,
+    "jump": 0.1,
+    "block": 0.5,
+    "special": 0.6,
+    "aggression": 0.7,
+    "mobility": 0.3
+  },
+  "expressions": {
+    "idle": "Scowling bitterly",
+    "attack": "Furious grimace",
+    "hit": "Glares with rage",
+    "victory": "Smug sneer"
+  },
+  "victory_pose": "The Koop crosses his arms and sneers disdainfully at his fallen opponent.",
+  "taunts": [
+    "Is that all you got?",
+    "Get out of my face.",
+    "Amateur hour."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Server Box Throw",
+      "description": "Pulls out a giant server box and throws it at you.",
+      "input": [
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "projectile",
+      "shout": null,
+      "pose_frames": [
+        "Leaning back pulling a heavy server box over his shoulder",
+        "Lunging forward hurling the server box"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A massive metallic computer server box with flashing LED lights",
+      "prop_size": 0.8
+    },
+    {
+      "id": "special2",
+      "name": "Access Revocation",
+      "description": "Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion.",
+      "input": [
+        "A",
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "stun",
+      "shout": null,
+      "pose_frames": [
+        "Crouched down furiously typing on a laptop",
+        "Standing up slamming the laptop shut"
+      ],
+      "height_ratio": 0.65,
+      "prop": "A modern sleek laptop",
+      "prop_size": 0.2
+    }
+  ],
+  "warnings": []
+}

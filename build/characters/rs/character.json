@@ -1,0 +1,97 @@
+{
+  "name": "RS",
+  "slug": "rs",
+  "summary": "A yoga master capable of stretching his limbs across the screen and floating mid-air to dodge attacks.",
+  "source": {
+    "text": "RS.txt",
+    "text_hash": "f1b13f9cae58",
+    "parsed_text": "RS is ...\n\n\nSpecial moves:\n- Long range kick, as a yoga master his legs stretch almost across the entire screen to try and hit you.\n- Yogo flight, when done mid jump allows him to float mid air for a few seconds.  Useful for dodging an oncoming attack.  Floats with legs criss crossed sitting style.",
+    "image": "RS.jpeg",
+    "health": 90,
+    "strength": 105,
+    "defense": 105,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 90,
+      "strength": 105,
+      "defense": 105,
+      "reason": "Yoga mastery provides discipline and body control, balancing range with flexibility."
+    }
+  },
+  "stats": {
+    "health": 90,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 15,
+    "block": 0.53,
+    "walk_speed": 2.08,
+    "jump_power": 6.4
+  },
+  "ai": {
+    "punch": 0.3,
+    "kick": 0.8,
+    "jump": 0.7,
+    "block": 0.6,
+    "special": 0.7,
+    "aggression": 0.5,
+    "mobility": 0.6
+  },
+  "expressions": {
+    "idle": "Serene and focused smile",
+    "attack": "Intense focused glare",
+    "hit": "Grimacing in pain",
+    "victory": "Peaceful closed-eye meditative state"
+  },
+  "victory_pose": "RS hovers slightly off the ground in a lotus position, chanting quietly with his hands together in prayer.",
+  "taunts": [
+    "Mind over matter.",
+    "Reach for enlightenment!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Long range kick",
+      "description": "As a yoga master his legs stretch almost across the entire screen to try and hit you.",
+      "input": [
+        "S",
+        "D",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "melee",
+      "shout": null,
+      "pose_frames": [
+        "Leaning back with one knee pulled tight to the chest.",
+        "Fully extending leg horizontally across the screen toward the opponent."
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 0.5
+    },
+    {
+      "id": "special2",
+      "name": "Yoga flight",
+      "description": "When done mid jump allows him to float mid air for a few seconds. Useful for dodging an oncoming attack. Floats with legs criss crossed sitting style.",
+      "input": [
+        "W",
+        "S",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "area",
+      "shout": "Yoga!",
+      "pose_frames": [
+        "Leaping upwards while tucking legs inward.",
+        "Floating stationary in mid-air in a cross-legged lotus posture."
+      ],
+      "height_ratio": 1.2,
+      "prop": null,
+      "prop_size": 0.5
+    }
+  ],
+  "warnings": []
+}

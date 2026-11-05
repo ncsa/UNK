@@ -11,10 +11,23 @@ const ATTACK_KEYS = { j: "LMB", k: "RMB" };  // keyboard punch / kick, alongside
 const SEQ_GAP = 450;                         // ms allowed between inputs of a special sequence
 const FONT = "'Press Start 2P', monospace";
 
+// level: "mid" can be blocked standing or crouching, "low" only crouching, "high" (from the air)
+// only standing. air: the attack lasts until landing.
 const ATTACKS = {
-  punch: { startup: 5, active: 5, recovery: 8, damage: s => s.punch_damage, hitstun: 14, push: 2.2 },
-  kick:  { startup: 8, active: 6, recovery: 12, damage: s => s.kick_damage, hitstun: 18, push: 3.0 },
+  punch:        { startup: 5, active: 5, recovery: 8, damage: s => s.punch_damage, hitstun: 14, push: 2.2, level: "mid" },
+  kick:         { startup: 8, active: 6, recovery: 12, damage: s => s.kick_damage, hitstun: 18, push: 3.0, level: "mid" },
+  crouch_punch: { startup: 4, active: 4, recovery: 7, damage: s => s.punch_damage * 0.8, hitstun: 12, push: 1.8, level: "mid" },
+  crouch_kick:  { startup: 7, active: 6, recovery: 16, damage: s => s.kick_damage * 0.9, hitstun: 20, push: 1.5, level: "low", launch: 2.6 },
+  jump_punch:   { startup: 4, active: 40, recovery: 0, damage: s => s.punch_damage * 1.1, hitstun: 16, push: 2.2, level: "high", air: true },
+  jump_kick:    { startup: 6, active: 40, recovery: 0, damage: s => s.kick_damage * 1.1, hitstun: 20, push: 3.0, level: "high", air: true },
+  dive_kick:    { startup: 3, active: 60, recovery: 0, damage: s => s.kick_damage, hitstun: 18, push: 2.5, level: "high", air: true },
 };
+// Animation to show when a character's sheet predates an extended move.
+const FALLBACK_ANIMS = {
+  crouch_block: "block", crouch_punch: "punch", crouch_kick: "kick",
+  jump_punch: "punch", jump_kick: "kick", dive_kick: "jump_kick",
+};
+const LANDING_TICKS = 6;   // recovery after landing from an air attack
 const SPECIAL = { startup: 14, active: 16, recovery: 18, cooldown: 240 };
 const STUN_TICKS = 110;
 
@@ -60,7 +73,7 @@ class Fighter {
     Object.assign(this, {
       x, y: 0, vx: 0, vy: 0, facing, health: this.stats.health, trail: this.stats.health,
       state: "idle", t: 0, hasHit: false, hitCount: 0, stunFor: 0, cooldown: 0,
-      special: null, shout: null, holdingBack: false,
+      special: null, shout: null, holdingBack: false, holdingDown: false, airAttacked: false,
     });
   }
 
@@ -72,9 +85,11 @@ class Fighter {
   get airborne() { return this.y > 0 || this.vy > 0; }
   get attacking() { return this.state in ATTACKS || this.state.startsWith("special"); }
   get canAct() { return ["idle", "walk", "crouch", "jump"].includes(this.state); }
+  get blocking() { return this.state === "block" || this.state === "crouch_block"; }
 
   anim(name) {
     const anims = this.char.sheetData.animations;
+    while (!anims[name] && FALLBACK_ANIMS[name]) name = FALLBACK_ANIMS[name];
     return anims[name] || anims.idle;
   }
 
@@ -115,6 +130,7 @@ class Fighter {
     if (this.cooldown > 0 && --this.cooldown === 0 && this.isPlayer) sfx("ready");
     if (this.shout && --this.shout.t <= 0) this.shout = null;
     this.holdingBack = input.move === -this.facing && !this.airborne;
+    this.holdingDown = !!input.crouch && !this.airborne;
 
     switch (this.state) {
       case "ko": case "victory": case "defeat":
@@ -125,8 +141,11 @@ class Fighter {
       case "dizzy":
         if (this.t >= this.stunFor) this.setState("idle");
         break;
-      case "block":
-        if (this.t >= this.stunFor) this.setState("idle");
+      case "block": case "crouch_block":
+        if (this.t >= this.stunFor) this.setState(this.state === "crouch_block" ? "crouch" : "idle");
+        break;
+      case "landing":
+        if (this.t >= LANDING_TICKS) this.setState("idle");
         break;
       default:
         if (this.state in ATTACKS) {
@@ -145,10 +164,12 @@ class Fighter {
       this.y += this.vy; this.vy -= GRAVITY;
       if (this.y <= 0) {
         this.y = 0; this.vy = 0;
+        this.airAttacked = false;
         if (this.state === "jump") { this.setState("idle"); this.vx = 0; sfx("land", { x: this.x }); }
+        else if (ATTACKS[this.state]?.air) { this.setState("landing"); this.vx = 0; sfx("land", { x: this.x }); }
         if (this.state === "ko") this.vx *= 0.5;
       }
-    } else if (["hit", "block", "ko", "dizzy"].includes(this.state) || this.state.startsWith("special")) {
+    } else if (["hit", "block", "crouch_block", "ko", "dizzy"].includes(this.state) || this.state.startsWith("special")) {
       this.vx *= 0.82;
     }
     if (!this.airborne && this.canAct && this.state !== "walk") this.vx = 0;
@@ -159,9 +180,19 @@ class Fighter {
     if (!this.airborne) this.facing = opp.x >= this.x ? 1 : -1;
     if (input.special && this.cooldown === 0) return this.startSpecial(input.special);
     if (input.attack) {
-      this.setState(input.attack);
+      // punch / kick become the crouching, jumping or diving version by stance.
+      let move = input.attack;
+      if (this.airborne) {
+        if (this.airAttacked) return;    // one attack per jump
+        this.airAttacked = true;
+        move = input.crouch ? "dive_kick" : `jump_${move}`;
+      } else if (input.crouch) {
+        move = `crouch_${move}`;
+      }
+      this.setState(move);
       sfx(`${input.attack}_whoosh`, { x: this.x });
-      if (!this.airborne) this.vx = 0;
+      if (move === "dive_kick") { this.vy = -4.2; this.vx = this.facing * 3.2; }
+      else if (!this.airborne) this.vx = 0;
       return;
     }
     if (this.airborne) return;
@@ -215,14 +246,18 @@ class Fighter {
     }
   }
 
-  receive(attacker, damage, match, { hitstun = 16, push = 2.5, stun = 0, unblockable = false, launch = 0 } = {}) {
+  receive(attacker, damage, match, { hitstun = 16, push = 2.5, stun = 0, unblockable = false, launch = 0, level = "mid" } = {}) {
     if (["ko", "victory", "defeat"].includes(this.state)) return;
-    const blocking = !unblockable && this.holdingBack && ["idle", "walk", "crouch", "block"].includes(this.state);
+    // Hold back to block; hold back and down to block low. Lows must be blocked crouching,
+    // attacks from the air standing.
+    const low = this.holdingDown;
+    const blocking = !unblockable && this.holdingBack && ["idle", "walk", "crouch", "block", "crouch_block"].includes(this.state)
+      && !(level === "low" && !low) && !(level === "high" && low);
     const box = this.hurtBox();
     const sparkX = attacker.x < this.x ? box.x + 4 : box.x + box.w - 4;
     if (blocking) {
       this.health -= damage * (1 - this.stats.block);
-      this.setState("block"); this.stunFor = 10;
+      this.setState(low ? "crouch_block" : "block"); this.stunFor = 10;
       this.vx = push * 0.6 * Math.sign(this.x - attacker.x || attacker.facing);
       match.spark(sparkX, box.y + 30, true);
       sfx("block", { x: this.x });
@@ -418,11 +453,16 @@ class AI {
     const toward = opp.x >= f.x ? 1 : -1;
     const dist = Math.abs(opp.x - f.x);
 
-    // React to an attack in progress: block with probability from the block trait.
+    // React to an attack in progress: block with probability from the block trait, low against
+    // sweeps and standing against attacks from the air (usually; reads are sometimes wrong).
     const threatened = (opp.attacking && dist < 95 && opp.t < 4) || this.incoming;
     if (threatened && !this.blockRolled) {
       this.blockRolled = true;
-      if (Math.random() < tr.block * 0.75) this.queue = [{ in: { move: -toward }, ticks: 22 }];
+      if (Math.random() < tr.block * 0.75) {
+        const level = ATTACKS[opp.state]?.level || "mid";
+        const low = level === "low" ? Math.random() < 0.85 : level === "high" ? Math.random() < 0.15 : Math.random() < 0.4;
+        this.queue = [{ in: { move: -toward, crouch: low }, ticks: 22 }];
+      }
     }
     if (!opp.attacking) this.blockRolled = false;
 
@@ -451,8 +491,10 @@ class AI {
       ]);
     } else {
       action = weightedPick([
-        { v: "punch", w: tr.punch * 1.6 },
-        { v: "kick", w: tr.kick * 1.6 },
+        { v: "punch", w: tr.punch * 1.1 },
+        { v: "kick", w: tr.kick * 1.1 },
+        { v: "lowpunch", w: tr.punch * 0.5 },
+        { v: "sweep", w: tr.kick * 0.5 },
         { v: "close", w: close.length ? tr.special * 0.5 : 0 },
         { v: "block", w: tr.block * 0.4 },
         { v: "retreat", w: (1 - tr.aggression) * 0.5 + tr.mobility * 0.2 },
@@ -467,10 +509,15 @@ class AI {
       wait: [{ in: {}, ticks: think }],
       block: [{ in: { move: "away" }, ticks: 26 }],
       jumpin: [{ in: { move: "toward", jump: true }, ticks: 1 }, { in: { move: "toward" }, ticks: 14 },
-               { in: { attack: Math.random() < tr.kick ? "kick" : "punch" }, ticks: 1 }],
+               Math.random() < 0.3 ? { in: { crouch: true, attack: "kick" }, ticks: 1 }   // dive kick
+                                   : { in: { attack: Math.random() < tr.kick ? "kick" : "punch" }, ticks: 1 }],
       jumpback: [{ in: { move: "away", jump: true }, ticks: 1 }],
       punch: [{ in: { attack: "punch" }, ticks: 1 }, { in: {}, ticks: think }],
       kick: [{ in: { attack: "kick" }, ticks: 1 }, { in: {}, ticks: think }],
+      lowpunch: [{ in: { crouch: true }, ticks: 2 }, { in: { crouch: true, attack: "punch" }, ticks: 1 },
+                 { in: { crouch: true }, ticks: think }],
+      sweep: [{ in: { crouch: true }, ticks: 2 }, { in: { crouch: true, attack: "kick" }, ticks: 1 },
+              { in: {}, ticks: think }],
       ranged: [{ in: { special: pick(ranged) }, ticks: 1 }, { in: {}, ticks: 20 }],
       close: [{ in: { special: pick(close) }, ticks: 1 }, { in: {}, ticks: 20 }],
     };
@@ -691,7 +738,8 @@ class Match {
     if (a.t < atk.startup || a.t >= atk.startup + atk.active) return;
     if (overlap(a.hitBox(), d.hurtBox())) {
       a.hasHit = true;
-      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push });
+      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push, level: atk.level, launch: atk.launch || 0 });
+      if (a.state === "dive_kick") { a.vy = 3.6; a.vx = -a.facing * 1.8; }  // bounce off
     }
   }
 
@@ -935,7 +983,12 @@ function select(group, value) {
   app.choice[group] = value;
   const grid = { player: "player-grid", opponent: "opponent-grid" }[group];
   for (const el of $(grid).children) el.classList.toggle("selected", el.dataset.value === value);
-  if (group === "player") showSpecialHelp();
+  if (group === "player") {
+    showSpecialHelp();
+    // No fighting yourself: hide your fighter among the opponents.
+    for (const el of $("opponent-grid").children) el.hidden = el.dataset.value === value;
+    if (app.choice.opponent === value) select("opponent", "random");
+  }
   if (group === "opponent") showArenaPreview(value);
   $("fight-btn").disabled = !(app.choice.player && app.arenas.length && app.characters.length > 1);
 }
@@ -999,6 +1052,9 @@ async function initMenu() {
   const mine = app.characters.find(c => c.slug === app.me.character);
   if (!app.characters.length) {
     pg.innerHTML = `<p class="empty">No characters built yet. Run add_character.py.</p>`;
+  } else if (app.me.choose_any) {
+    // The first account in users.csv may play anyone.
+    for (const c of app.characters) pg.append(characterCard(c, "player"));
   } else if (mine) {
     const card = characterCard(mine, "player");
     card.onclick = null; card.style.cursor = "default";
@@ -1008,7 +1064,8 @@ async function initMenu() {
       ? `Your fighter "${esc(app.me.character_name)}" isn't built yet.`
       : "No fighter is assigned to your account."} Ask the admin to set one in users.csv.</p>`;
   }
-  const rivals = app.characters.filter(c => c.slug !== app.me.character);  // no fighting yourself
+  const rivals = app.me.choose_any ? app.characters  // select() hides whoever is playing
+    : app.characters.filter(c => c.slug !== app.me.character);  // no fighting yourself
   for (const c of rivals) og.append(characterCard(c, "opponent"));
   const randomCard = document.createElement("button");
   randomCard.className = "card"; randomCard.dataset.value = "random";
@@ -1017,8 +1074,8 @@ async function initMenu() {
   if (rivals.length) og.append(randomCard);
   else og.innerHTML = `<p class="empty">No one to fight yet. Build another character with add_character.py.</p>`;
 
-  if (mine) select("player", mine.slug);
   select("opponent", "random");
+  if (mine || app.me.choose_any) select("player", (mine || app.characters[0])?.slug);
   refreshScores();
 }
 

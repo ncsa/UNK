@@ -1,0 +1,98 @@
+{
+  "name": "Alkeris",
+  "slug": "alkeris",
+  "summary": "Alkeris is an analytical fighter who bores opponents with tedious presentations and uses hot, excessive coffee as a hazard.",
+  "source": {
+    "text": "Alkeris.txt",
+    "text_hash": "53259acb175b",
+    "parsed_text": "Alkeris is ...\n\n\nSpecial moves:\n- Brings out tons of spreadsheets, power point presentations, blue prints boring you to death with excessive details\n- Brews a fine cup of coffee, sips it, throws it in the air to have it rain down in excessive fashion burning the player if in range",
+    "image": "Alkeris.jpeg",
+    "health": 90,
+    "strength": 80,
+    "defense": 130,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 90,
+      "strength": 80,
+      "defense": 130,
+      "reason": "Meticulous preparation, blueprint defense, and low direct physical power"
+    }
+  },
+  "stats": {
+    "health": 90,
+    "punch_damage": 4,
+    "kick_damage": 6,
+    "special_damage": 11,
+    "block": 0.65,
+    "walk_speed": 1.92,
+    "jump_power": 6.1
+  },
+  "ai": {
+    "punch": 0.3,
+    "kick": 0.2,
+    "jump": 0.2,
+    "block": 0.8,
+    "special": 0.9,
+    "aggression": 0.2,
+    "mobility": 0.4
+  },
+  "expressions": {
+    "idle": "Calm, analytical smirk while checking a clipboard",
+    "attack": "Intensely focused with narrowed eyes behind glasses",
+    "hit": "Surprised, highly annoyed wince",
+    "victory": "Smug, satisfied grin while straightening a tie"
+  },
+  "victory_pose": "Alkeris neatly adjusts his glasses, checks his watch, and casually tucks a stack of blueprints under his arm.",
+  "taunts": [
+    "Your technique is severely unoptimized.",
+    "Let me explain where you went wrong.",
+    "This was all accounted for in my calculations."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Tedious Presentation",
+      "description": "Brings out tons of spreadsheets, power point presentations, blue prints boring you to death with excessive details",
+      "input": [
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "stun",
+      "shout": "As you can see on chart B!",
+      "pose_frames": [
+        "Unfolds a massive stack of blueprints and papers forward",
+        "Holds up a shining laser pointer while tapping a clipboard"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A towering stack of detailed paper spreadsheets, blueprints, and holographic chart displays",
+      "prop_size": 1.2
+    },
+    {
+      "id": "special2",
+      "name": "Excessive Espresso",
+      "description": "Brews a fine cup of coffee, sips it, throws it in the air to have it rain down in excessive fashion burning the player if in range",
+      "input": [
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "area",
+      "shout": "Careful, it's scalding!",
+      "pose_frames": [
+        "Leans back taking a quick, refined sip from a porcelain cup",
+        "Tosses the mug violently upward into the sky"
+      ],
+      "height_ratio": 0.9,
+      "prop": "A steaming porcelain coffee cup bursting into scalding droplets of dark liquid",
+      "prop_size": 0.3
+    }
+  ],
+  "warnings": []
+}

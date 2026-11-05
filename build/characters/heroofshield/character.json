@@ -1,0 +1,101 @@
+{
+  "name": "HeroOfSHIELD",
+  "slug": "heroofshield",
+  "summary": "HeroOfSHIELD is a mysterious fighter who uses unconventional tactics, duct tape, and a large white van to overcome opponents.",
+  "source": {
+    "text": "HeroOfSHIELD.txt",
+    "text_hash": "81d59c906afc",
+    "parsed_text": "HeroOfSHIELD is ...\n\n\nSpecial moves:\n- Duct tape, he wraps duct tape around your legs causing you to stumble about for a few seconds\n- Ultimate move: Jumps in a large windowless white van and runs you over",
+    "image": "HeroOfSHIELD.jpeg",
+    "health": 100,
+    "strength": 100,
+    "defense": 100,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 100,
+      "strength": 100,
+      "defense": 100,
+      "reason": "Balanced overall stats due to versatile and unconventional fighting tactics."
+    }
+  },
+  "stats": {
+    "health": 100,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 14,
+    "block": 0.5,
+    "walk_speed": 2.08,
+    "jump_power": 6.4
+  },
+  "ai": {
+    "punch": 0.5,
+    "kick": 0.5,
+    "jump": 0.6,
+    "block": 0.5,
+    "special": 0.8,
+    "aggression": 0.7,
+    "mobility": 0.6
+  },
+  "expressions": {
+    "idle": "Smirking confidently",
+    "attack": "Grit teeth with intense glare",
+    "hit": "Wincing in pain",
+    "victory": "Triumphant grin"
+  },
+  "victory_pose": "HeroOfSHIELD stands tall, leaning against the white van while casually tossing a roll of duct tape into the air.",
+  "taunts": [
+    "You can't fix this with duct tape!",
+    "Get ready for a ride!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Duct tape",
+      "description": "Wraps duct tape around your legs causing you to stumble about for a few seconds.",
+      "input": [
+        "A",
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "stun",
+      "shout": "Hold still!",
+      "pose_frames": [
+        "Stooping down while pulling a strip of duct tape",
+        "Sweeping the tape forward at the opponent's ankles"
+      ],
+      "height_ratio": 0.7,
+      "prop": "A strip of silver duct tape extending outward",
+      "prop_size": 0.3
+    },
+    {
+      "id": "special2",
+      "name": "Ultimate move",
+      "description": "Jumps in a large windowless white van and runs you over.",
+      "input": [
+        "S",
+        "D",
+        "S",
+        "D",
+        "W",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "area",
+      "shout": "Out of the way!",
+      "pose_frames": [
+        "Leaping backward into the driver's side door of a white van",
+        "Accelerating forward rapidly inside the large white van"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A large windowless white van moving forward",
+      "prop_size": 1.5
+    }
+  ],
+  "warnings": []
+}

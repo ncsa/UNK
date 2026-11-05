@@ -1,9 +1,5 @@
-The Koop is rude and grumpy. He does mostly punches and jumps rarely.
-
-Health: 150
-Strength: 150
-Defense: 150
+The Koop is rude and grumpy and very strong. He does mostly punches and jumps rarely.  His special attack cooldown is twice as fast as others.
 
 Special moves:
-- Throws a server box at you, pulls out a giant server box and throws it at you.  Triggered with S, S, left click.
+- Throws a server box at you, pulls out a giant server box and throws it at you.
 - Crouches and pulls out a laptop to remove all your access to web services causing major momentary confusion of the enemy as they check their cell phone, watch, etc.  

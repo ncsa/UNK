@@ -1,0 +1,81 @@
+{
+  "name": "Yanello",
+  "slug": "yanello",
+  "summary": "Yanello is a combatant who uses a magical wand to summon elaborate transportation-themed attacks to deal heavy damage.",
+  "source": {
+    "text": "Yanello.txt",
+    "text_hash": "185dc571de1f",
+    "parsed_text": "Yanello is ...\n\n\nSpecial moves:\n- Magic wand, pulls out and uses a glittery fairy wand on you to make an uber drive by, pull you in, drive you off to the airport, followed by a plain flying off in the distance with a figure falling out, which is the player, hitting the ground for major damage.",
+    "image": "Yanello.jpeg",
+    "health": 95,
+    "strength": 125,
+    "defense": 80,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 95,
+      "strength": 125,
+      "defense": 80,
+      "reason": "Relies on high-damage magic wand summons resulting in major impact damage"
+    }
+  },
+  "stats": {
+    "health": 95,
+    "punch_damage": 6,
+    "kick_damage": 9,
+    "special_damage": 18,
+    "block": 0.4,
+    "walk_speed": 2.0,
+    "jump_power": 6.25
+  },
+  "ai": {
+    "punch": 0.3,
+    "kick": 0.3,
+    "jump": 0.4,
+    "block": 0.5,
+    "special": 0.9,
+    "aggression": 0.7,
+    "mobility": 0.5
+  },
+  "expressions": {
+    "idle": "Smirking confidently while holding position",
+    "attack": "Gleefully waving the magical wand",
+    "hit": "Shocked and annoyed gasp",
+    "victory": "Triumphant laugh with wand held high"
+  },
+  "victory_pose": "Yanello dramatically flourishes the fairy wand as sparkles rain down, looking directly at the camera with a satisfied grin.",
+  "taunts": [
+    "Need a ride out of here?",
+    "Your flight has been cancelled!",
+    "Hope you remembered to pack your bags."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Magic wand",
+      "description": "Pulls out a glittery fairy wand to summon an uber drive-by that pulls the enemy in, drives them to the airport, and drops them from an airplane for major damage.",
+      "input": [
+        "S",
+        "A",
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "projectile",
+      "shout": "Flight confirmed!",
+      "pose_frames": [
+        "Waving a glittery fairy wand forward with a flash of light",
+        "Points the wand skyward with a flourish as the aircraft flies past"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A shiny, glittery star-tipped fairy wand",
+      "prop_size": 0.4
+    }
+  ],
+  "warnings": [],
+  "proportions": "a slim, slender build: noticeably thinner than an average adult, narrow waist and hips, slim arms and legs, realistic adult proportions; same patterned blue sweater and blue jeans; she wears shoes, never barefoot: simple dark brown leather flat shoes"
+}

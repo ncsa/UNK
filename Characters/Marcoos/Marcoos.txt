@@ -14,4 +14,6 @@ Special moves:
 # sequence that suits the move is picked for you. To choose your own, end the line with one:
 # directions are relative to the opponent (D toward them, A away, W up, S down), then punch
 # (left click or J) or kick (right click or K). e.g.
-# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!". Triggered with S, D, punch.
+# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!".
+- Pulls out wolverine type claws and upper cuts you
+- Quantum teleportation moving him to the other side of the player

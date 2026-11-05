@@ -1,0 +1,77 @@
+{
+  "name": "Kengore",
+  "slug": "kengore",
+  "summary": "Kengore is a combatant equipped with a destructive laser eyes attack.",
+  "source": {
+    "text": "Kengore.txt",
+    "text_hash": "519dead885e8",
+    "parsed_text": "Kengore is ...\n\n\nSpecial moves:\n- Laser eyes that burn the player",
+    "image": "Kengore.jpeg",
+    "health": 100,
+    "strength": 100,
+    "defense": 100,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 100,
+      "strength": 100,
+      "defense": 100,
+      "reason": "Standard balanced attributes based on limited initial fighter information."
+    }
+  },
+  "stats": {
+    "health": 100,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 14,
+    "block": 0.5,
+    "walk_speed": 2.0,
+    "jump_power": 6.25
+  },
+  "ai": {
+    "punch": 0.5,
+    "kick": 0.5,
+    "jump": 0.5,
+    "block": 0.5,
+    "special": 0.8,
+    "aggression": 0.6,
+    "mobility": 0.5
+  },
+  "expressions": {
+    "idle": "Stern and focused gaze",
+    "attack": "Intense glaring scowl",
+    "hit": "Grimacing in pain",
+    "victory": "Smirking with glowing eyes"
+  },
+  "victory_pose": "Kengore stands tall, crosses their arms, and lets out a brief burst of energy from their eyes.",
+  "taunts": [
+    "You cannot dodge my gaze!",
+    "Is that the best you've got?"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Laser Eyes",
+      "description": "Fires energy beams from the eyes that burn the player.",
+      "input": [
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "projectile",
+      "shout": "Burn!",
+      "pose_frames": [
+        "Leaning back slightly while gathering energy in the eyes",
+        "Thrusting the head forward as twin beams shoot out"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A concentrated pair of red laser beams extending horizontally",
+      "prop_size": 0.2
+    }
+  ],
+  "warnings": []
+}
