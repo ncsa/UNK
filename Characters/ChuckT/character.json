@@ -4,8 +4,8 @@
   "summary": "ChuckT is an aggressive, bean-counting warrior who ruthlessly audits opponents into financial ruin.",
   "source": {
     "text": "ChuckT.txt",
-    "text_hash": "a10eced08f99",
-    "parsed_text": "ChuckT is ...\n\n\nSpecial moves:\n- Pull out a calculator and audits your ass to the poor house!",
+    "text_hash": "12bbb3ad1f54",
+    "parsed_text": "ChuckT is ...\n\n\nSpecial moves:\n- Pull out a calculator and audits your ass to the poor house!\n- Chuck Cannon, blasts through bureaucratic BS",
     "image": "ChuckT.jpeg",
     "health": 100,
     "strength": 100,
@@ -72,6 +72,29 @@
       "height_ratio": 1.0,
       "prop": null,
       "prop_size": 0.3
+    },
+    {
+      "id": "special2",
+      "name": "Chuck Cannon",
+      "description": "Blasts through bureaucratic BS: a thick golden cannon blast from his palms that shreds paperwork and red tape on its way across the screen.",
+      "input": [
+        "A",
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "beam",
+      "shout": "CHUCK CANNON!!!!",
+      "pose_frames": [
+        "pulling both hands back to the hip in a charged stance, leaning back",
+        "thrusting palms forward straight ahead with fingers flared, stance wide"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 1.0,
+      "beam_frame": 1,
+      "beam_style": "blast"
     }
   ],
   "warnings": [],

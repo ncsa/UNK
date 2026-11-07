@@ -816,8 +816,9 @@ def stage_parse(folder, reparse):
             sp["extra_props"] = old["extra_props"]
         if old.get("effect") == "abduct":
             sp["effect"] = "abduct"
-        if "origin" in old:  # where a projectile leaves the sprite, measured by hand
-            sp["origin"] = old["origin"]
+        for k in ("origin", "beam_frame", "beam_style"):  # set by hand: where a shot or beam comes from, its look
+            if k in old:
+                sp[k] = old[k]
     # Keep fields added by hand (e.g. "proportions"); the parser never writes them.
     for k, v in (existing or {}).items():
         if k not in char and k not in ("draft", "parsed_offline"):

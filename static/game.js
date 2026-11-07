@@ -42,6 +42,9 @@ const comboPoints = n => COMBO.base * Math.min(n, COMBO.maxScored) ** 2;
 // points: per breaker, before the difficulty multiplier (as in server.py)
 const BREAKER = { invuln: 26, cooldown: 300, jump: 8.5, slowmo: 50, slowSpeed: 0.4, points: 1000 };
 const BEAM = { startup: 14, active: 34, recovery: 14, every: 8, hits: 3 };
+// A beam with beam_style "blast" (a cannon blast rather than a laser): its thickness, and how many
+// scraps of paperwork tumble out of it.
+const BLAST = { thickness: 16, papers: 14 };
 // Flurry: a burst of rapid kicks, one hit every `every` ticks, edging forward to stay in range.
 // damage: the whole flurry's damage as a multiple of special_damage, if every kick lands.
 const FLURRY = { startup: 10, active: 54, recovery: 14, every: 6, hits: 8, damage: 1.3, creep: 0.7 };
@@ -171,7 +174,11 @@ class Fighter {
     if (s in ATTACKS) {
       anim = this.anim(s); i = this.t < ATTACKS[s].startup ? 0 : 1;
     } else if (s.startsWith("special") && this.special?.effect === "beam") {
-      anim = this.t < BEAM.startup ? this.anim("idle") : this.anim(s);
+      // beam_frame (character.json): which frame fires it. 0 (eyes): stand normally while charging;
+      // 1 (hands): the other frame is the wind-up.
+      const fire = this.special.beam_frame || 0;
+      if (this.t < BEAM.startup && !fire) anim = this.anim("idle");
+      else { anim = this.anim(s); i = this.t < BEAM.startup ? 0 : fire; }
     } else if (s.startsWith("special") && this.special?.effect === "cat") {
       // waiting for the cat (normal stance), the cat at her feet (frame 0, which has it), petting it (1)
       const k = this.cat?.arrived ? this.t - this.cat.arrived : -1;
@@ -368,13 +375,16 @@ class Fighter {
   }
 
   drawBeam(ctx, camX, f, px, py) {
-    const t = this.t;
-    if (t < BEAM.startup) {  // eyes charging up
-      const r = 1 + t / 4, ey = py - f.ay + Math.round(f.h * 0.14);
-      ctx.fillStyle = `rgba(255,60,60,${0.4 + t / 40})`;
-      ctx.beginPath(); ctx.arc(px + this.facing * 6, ey, r, 0, Math.PI * 2); ctx.fill();
+    const t = this.t, blast = this.special.beam_style === "blast";
+    if (t < BEAM.startup) {  // charging up: at the eyes, or between the hands drawn back
+      const r = 1 + t / (blast ? 2.5 : 4);
+      const ey = py - f.ay + Math.round(f.h * (blast ? 0.6 : 0.14)), ex = px + this.facing * (blast ? 4 : 6);
+      ctx.fillStyle = blast ? `rgba(255,214,80,${0.4 + t / 30})` : `rgba(255,60,60,${0.4 + t / 40})`;
+      ctx.beginPath(); ctx.arc(ex, ey, r, 0, Math.PI * 2); ctx.fill();
+      if (blast) { ctx.fillStyle = "#fff8d0"; ctx.beginPath(); ctx.arc(ex, ey, r * 0.45, 0, Math.PI * 2); ctx.fill(); }
       return;
     }
+    if (blast) return this.drawBlast(ctx, camX);
     if (t >= BEAM.startup + BEAM.active) return;
     const fade = Math.min(1, (BEAM.startup + BEAM.active - t) / 6);
     const b = this.beamLine(camX), wobble = (t % 4 < 2) ? 1 : 0;
@@ -390,6 +400,45 @@ class Fighter {
     ctx.restore();
   }
 
+  // beam_style "blast": a thick golden cannon blast from the palms, shredding paperwork as it goes.
+  drawBlast(ctx, camX) {
+    const t = this.t, k = t - BEAM.startup;
+    const fade = Math.min(1, (BEAM.startup + BEAM.active - t) / 6), grow = Math.min(1, (k + 1) / 4);
+    const b = this.beamLine(camX), len = Math.abs(b.x1 - b.x0) * Math.hypot(1, b.slope);
+    const h = Math.round(BLAST.thickness * grow) + (t % 4 < 2 ? 2 : 0);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    ctx.translate(Math.round(b.x0 - camX), b.y0);
+    ctx.scale(this.facing, 1);
+    ctx.rotate(Math.atan(b.slope));
+    ctx.fillStyle = "rgba(255,190,60,0.35)"; ctx.fillRect(0, -h / 2 - 4, len, h + 8);
+    ctx.fillStyle = "#ffcf3a"; ctx.fillRect(0, -h / 2, len, h);
+    ctx.fillStyle = "#fff1b0"; ctx.fillRect(0, -h / 4, len, Math.ceil(h / 2));
+    ctx.fillStyle = "#fffdf2"; ctx.fillRect(0, -1, len, 2);
+    ctx.fillStyle = "#fff8d0";  // the muzzle flare at the palms
+    ctx.beginPath(); ctx.ellipse(2, 0, 7 + (t % 3), h / 2 + 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Shredded paperwork tumbling out of the blast: forms, memos, red tape.
+    for (let i = 0; i < BLAST.papers; i++) {
+      const along = (k * 7 + i * 47) % Math.max(60, len);
+      const out = (along / 60) * (i % 2 ? 1 : -1) * (4 + (i * 13) % 9);  // drifting off the beam
+      const y = Math.sin(k * 0.3 + i) * h * 0.35 + out, spin = k * 0.35 + i * 1.3;
+      ctx.save();
+      ctx.translate(Math.round(along), Math.round(y));
+      ctx.rotate(spin);
+      if (i % 5 === 4) {  // a strand of red tape
+        ctx.fillStyle = "#d22a2a"; ctx.fillRect(-6, -1, 12, 2);
+      } else {
+        const torn = i % 3 === 0;
+        ctx.fillStyle = "#4a4a4a"; ctx.fillRect(-4, -5, torn ? 6 : 8, 10);
+        ctx.fillStyle = "#f6f3e8"; ctx.fillRect(-3, -4, torn ? 4 : 6, 8);
+        ctx.fillStyle = "#8a8a94"; ctx.fillRect(-2, -2, 4, 1); ctx.fillRect(-2, 0, 3, 1);
+        if (i % 4 === 1) { ctx.fillStyle = "#d22a2a"; ctx.fillRect(-2, 2, 4, 1); }  // a red stamp
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   // The beam from the front edge of the sprite to the edge of the screen (world coordinates):
   // from (x0, y0) to x1, thickness h, dropping `slope` px per px (see aimBeam).
   beamLine(camX) {
@@ -399,7 +448,7 @@ class Fighter {
     const [top, bottom, from] = f.edge || [-Math.round(f.h * 0.86), -Math.round(f.h * 0.82)];
     const x0 = this.x + this.facing * (from ?? f.w - f.ax - 1);
     return { x0, y0: GROUND - this.y + (top + bottom) / 2, x1: this.facing > 0 ? camX + W : camX,
-             h: bottom - top + 2, slope: this.beamSlope || 0 };
+             h: this.special?.beam_style === "blast" ? BLAST.thickness : bottom - top + 2, slope: this.beamSlope || 0 };
   }
 
   // A beam fired over the opponent's head (a giant's eyes) tilts down to their upper chest; aimed
