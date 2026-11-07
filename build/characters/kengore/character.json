@@ -1,43 +1,43 @@
 {
   "name": "Kengore",
   "slug": "kengore",
-  "summary": "Kengore is a combatant equipped with a destructive laser eyes attack.",
+  "summary": "Kengore is a high-tech warrior who uses energy weaponry including laser eyes, a shoulder-mounted plasma cannon, and devastating orbital strikes.",
   "source": {
     "text": "Kengore.txt",
-    "text_hash": "519dead885e8",
-    "parsed_text": "Kengore is ...\n\n\nSpecial moves:\n- Laser eyes that burn the player",
+    "text_hash": "ab18ffc0d979",
+    "parsed_text": "Kengore is ...\n\n\nSpecial moves:\n- Laser eyes that burn the player, cool down is very low for this so he can use it frequently\n- Shoulder mounted plasma cannon, he positions his body to fire, activating from his wrist computer, cool down is very low for this so he can use it frequently\n- Ultimate move: orbital lasers, activated from his wrist computer, a giant beam comes down from the sky to destroy the other character",
     "image": "Kengore.jpeg",
-    "health": 100,
-    "strength": 100,
-    "defense": 100,
+    "health": 95,
+    "strength": 115,
+    "defense": 90,
     "inferred": [
       "health",
       "strength",
       "defense"
     ],
     "inferred_stats": {
-      "health": 100,
-      "strength": 100,
-      "defense": 100,
-      "reason": "Standard balanced attributes based on limited initial fighter information."
+      "health": 95,
+      "strength": 115,
+      "defense": 90,
+      "reason": "High offensive capability from ranged high-energy weaponry paired with standard durability."
     }
   },
   "stats": {
-    "health": 100,
-    "punch_damage": 5,
-    "kick_damage": 7,
-    "special_damage": 14,
-    "block": 0.5,
+    "health": 95,
+    "punch_damage": 6,
+    "kick_damage": 8,
+    "special_damage": 16,
+    "block": 0.45,
     "walk_speed": 2.0,
     "jump_power": 6.25
   },
   "ai": {
-    "punch": 0.5,
-    "kick": 0.5,
-    "jump": 0.5,
+    "punch": 0.4,
+    "kick": 0.4,
+    "jump": 0.4,
     "block": 0.5,
-    "special": 0.8,
-    "aggression": 0.6,
+    "special": 0.9,
+    "aggression": 0.7,
     "mobility": 0.5
   },
   "expressions": {
@@ -49,13 +49,14 @@
   "victory_pose": "Kengore stands tall, crosses their arms, and lets out a brief burst of energy from their eyes.",
   "taunts": [
     "You cannot dodge my gaze!",
-    "Is that the best you've got?"
+    "Is that the best you've got?",
+    "Target locked and destroyed."
   ],
   "specials": [
     {
       "id": "special1",
       "name": "Laser Eyes",
-      "description": "Fires energy beams from the eyes that burn the player.",
+      "description": "Laser eyes that burn the player, cool down is very low for this so he can use it frequently",
       "input": [
         "S",
         "D",
@@ -70,8 +71,59 @@
       ],
       "height_ratio": 1.0,
       "prop": "A concentrated pair of red laser beams extending horizontally",
-      "prop_size": 0.2
+      "prop_size": 0.2,
+      "cooldown": 1.2
+    },
+    {
+      "id": "special2",
+      "name": "Plasma Cannon",
+      "description": "Shoulder mounted plasma cannon, he positions his body to fire, activating from his wrist computer, cool down is very low for this so he can use it frequently",
+      "input": [
+        "A",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "projectile",
+      "shout": "Fire!",
+      "pose_frames": [
+        "Bracing sideways and tapping his wrist computer as a compact plasma cannon mounted on his right shoulder swivels forward, glowing as it charges",
+        "Leaning into the recoil as the shoulder-mounted plasma cannon fires forward, a bright flash at the cannon's muzzle"
+      ],
+      "height_ratio": 0.9,
+      "prop": "A glowing sphere of superheated plasma energy",
+      "prop_size": 0.4,
+      "cooldown": 1.2,
+      "origin": [
+        41,
+        -113
+      ]
+    },
+    {
+      "id": "special3",
+      "name": "Orbital Lasers",
+      "description": "Ultimate move: orbital lasers, activated from his wrist computer, a giant beam comes down from the sky to destroy the other character",
+      "input": [
+        "S",
+        "D",
+        "S",
+        "D",
+        "A",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "orbital",
+      "shout": "Orbital strike!",
+      "pose_frames": [
+        "Tapping a command into his wrist computer while looking up at the sky",
+        "One fist raised high toward the sky calling down the strike, the other forearm holding the wrist computer up"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 2.5,
+      "cooldown": 12
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "stature": 1.22
 }

@@ -161,7 +161,11 @@ VOICE_LINES = {
     "vo_you_win": "You win!",
     "vo_you_lose": "You lose!",
     "vo_draw": "Draw game!",
+    # Read plainly, then the opening syllable is repeated like an arcade sampler: "co-co-co-COMBO".
+    "vo_combo_breaker": "COMBO BREAKER!!!",
 }
+# Per-line processing beyond ANNOUNCER: a longer cut-off, and stutter = (syllable seconds, repeats).
+VOICE_PROC = {"vo_combo_breaker": dict(max_seconds=3.5, stutter=(0.13, 3))}
 # Announcer delivery: low stability and high style make it shouty and dramatic.
 VOICE_SETTINGS = dict(stability=0.3, similarity_boost=0.8, style=0.7, use_speaker_boost=True)
 
@@ -331,13 +335,19 @@ def process(x, sr, proc):
     return snesify(x, **proc), proc.get("rate", 16000)
 
 
-def snesify(x, rate=16000, bits=10, drive=0.3, echo=None, max_seconds=2.5):
+def snesify(x, rate=16000, bits=10, drive=0.3, echo=None, max_seconds=2.5, stutter=None):
     """Make clean audio sound like an SNES sample: trimmed, resampled down (the SNES ran most
     samples well under 32 kHz), muffled like its Gaussian interpolation, driven, optionally
     echoed like its echo unit, and quantized for BRR-style grit. Returns int16 at `rate`."""
     if x.ndim > 1:
         x = x.mean(axis=1)
     x = trim(x, RAW_RATE, -40)
+    if stutter:  # repeat the opening syllable, sampler style: "co-co-co-COMBO"
+        seconds, repeats = stutter
+        syl = x[:int(seconds * RAW_RATE)].copy()
+        tail = int(0.015 * RAW_RATE)
+        syl[-tail:] *= np.linspace(1, 0, tail)
+        x = np.concatenate([syl] * repeats + [x])
 
     g = gcd(rate, RAW_RATE)
     y = resample_poly(x, rate // g, RAW_RATE // g)
@@ -669,7 +679,7 @@ def jobs():
         for k in range(1, variants + 1):
             out.append((name if k == 1 else f"{name}-{k}", name, "sfx", prompt, seconds, proc))
     for name, text in {**VOICE_LINES, **character_lines()}.items():
-        out.append((name, name, "voice", text, None, ANNOUNCER))
+        out.append((name, name, "voice", text, None, dict(ANNOUNCER, **VOICE_PROC.get(name, {}))))
     return out
 
 

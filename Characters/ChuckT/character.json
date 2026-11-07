@@ -1,0 +1,81 @@
+{
+  "name": "ChuckT",
+  "slug": "chuckt",
+  "summary": "ChuckT is an aggressive, bean-counting warrior who ruthlessly audits opponents into financial ruin.",
+  "source": {
+    "text": "ChuckT.txt",
+    "text_hash": "a10eced08f99",
+    "parsed_text": "ChuckT is ...\n\n\nSpecial moves:\n- Pull out a calculator and audits your ass to the poor house!",
+    "image": "ChuckT.jpeg",
+    "health": 100,
+    "strength": 100,
+    "defense": 100,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 100,
+      "strength": 100,
+      "defense": 100,
+      "reason": "balanced base stats for an unstated auditor fighter"
+    }
+  },
+  "stats": {
+    "health": 100,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 14,
+    "block": 0.5,
+    "walk_speed": 1.92,
+    "jump_power": 6.1
+  },
+  "ai": {
+    "punch": 0.5,
+    "kick": 0.3,
+    "jump": 0.2,
+    "block": 0.7,
+    "special": 0.8,
+    "aggression": 0.6,
+    "mobility": 0.4
+  },
+  "expressions": {
+    "idle": "stern and focused grin",
+    "attack": "furious calculation glare",
+    "hit": "shocked adjustments of glasses",
+    "victory": "smug side-eye while filing paperwork"
+  },
+  "victory_pose": "ChuckT adjusts his glasses with one finger while stamping 'DENIED' onto an official audit document.",
+  "taunts": [
+    "You're non-compliant!",
+    "Let me audit those stats.",
+    "Your loss is fully tax-deductible!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Tax Audit",
+      "description": "Pulls out a calculator and audits your ass to the poor house! A fan of glowing red numbers sprays across the screen; if it reaches the opponent their money bursts out of their pockets and whirls around them, pelting them.",
+      "input": [
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "audit",
+      "shout": "Audit time!",
+      "pose_frames": [
+        "hunched over a pocket calculator held in both hands, furiously punching its keys with one finger, scowling",
+        "holding the pocket calculator out at arm's length toward the opponent, smug, other hand on hip"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 0.3
+    }
+  ],
+  "warnings": [],
+  "frame_scale": {
+    "dive_kick_0": 0.9
+  }
+}

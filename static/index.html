@@ -27,6 +27,35 @@
     color: #fff; text-shadow: 2px 2px 0 #000; animation: blink 1s steps(2, start) infinite; }
   @keyframes blink { to { visibility: hidden; } }
 
+  /* ---------- high scores attract screen ---------- */
+  #hiscores { position: fixed; inset: 0; display: none; cursor: pointer; isolation: isolate;
+    flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+  #hiscores.active { display: flex; }
+  #hiscores::before { content: ""; position: fixed; inset: 0; z-index: -1;
+    background: linear-gradient(rgba(8, 8, 20, 0.78), rgba(8, 8, 20, 0.9)), url("/assets/map.jpeg") center / cover, var(--bg); }
+  #hiscores h1 { font-size: clamp(22px, 5vw, 40px); margin: 0 0 22px; color: var(--gold);
+    text-shadow: 3px 3px 0 var(--red), 6px 6px 0 #000; letter-spacing: 3px; text-align: center; }
+  #hiscore-list { list-style: none; margin: 0; padding: 0; width: min(720px, 100%); }
+  #hiscore-list li { display: grid; grid-template-columns: 52px 34px 1fr 1fr auto; align-items: center; gap: 12px;
+    padding: 6px 10px; font-size: clamp(9px, 2vw, 14px); color: var(--text);
+    opacity: 0; animation: slidein .35s steps(5, end) forwards; }
+  #hiscore-list li:nth-child(odd) { background: rgba(255, 255, 255, 0.04); }
+  #hiscore-list .rank { color: var(--dim); }
+  #hiscore-list .face { width: 30px; height: 30px; object-fit: cover; background: #000; border: 2px solid var(--edge); }
+  #hiscore-list .char { color: var(--dim); font-size: 0.75em; }
+  #hiscore-list .char .combo { color: #ff9d2e; font-weight: normal; }
+  #hiscore-list .pts { color: var(--gold); text-align: right; letter-spacing: 1px; }
+  #hiscore-list li.gold * { color: #ffd23f; } #hiscore-list li.gold .face { border-color: #ffd23f; }
+  #hiscore-list li.silver * { color: #d8dde6; } #hiscore-list li.silver .face { border-color: #d8dde6; }
+  #hiscore-list li.bronze * { color: #e0965a; } #hiscore-list li.bronze .face { border-color: #e0965a; }
+  #hiscore-list li.gold { font-size: clamp(11px, 2.6vw, 18px); animation: slidein .35s steps(5, end) forwards, glow 1.2s steps(2, start) .8s infinite; }
+  #hiscore-list li.none { display: block; text-align: center; color: var(--dim); }
+  @keyframes slidein { from { opacity: 0; transform: translateX(-40px); } to { opacity: 1; transform: none; } }
+  @keyframes glow { 50% { text-shadow: 0 0 8px #ffd23f; } }
+  #hiscores .press { margin-top: 26px; font-size: 11px; color: #fff; animation: blink 1s steps(2, start) infinite; }
+  @media (max-width: 560px) { #hiscore-list li { grid-template-columns: 40px 26px 1fr auto; } #hiscore-list .char { display: none; }
+    #hiscore-list .face { width: 22px; height: 22px; } }
+
   /* ---------- select screen ---------- */
   #select { max-width: 1100px; margin: 0 auto; padding: 20px 16px 40px; isolation: isolate; }
   /* Map.jpeg behind the menu, darkened so text stays readable; the screen is plain if it's missing. */
@@ -36,9 +65,36 @@
   h1 { font-size: 28px; margin: 8px 0; color: var(--gold); text-shadow: 3px 3px 0 var(--red); letter-spacing: 2px; }
   h2 { font-size: 12px; color: var(--dim); margin: 22px 0 10px; }
   #user { color: var(--dim); font-size: 10px; }
+  .userbox { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .hdr-btn { font-size: 8px; padding: 5px 8px; background: transparent; color: var(--dim); border: 2px solid var(--edge); }
+  .hdr-btn:hover { color: var(--text); border-color: var(--dim); }
+  .hdr-btn[hidden] { display: none; }
+  #acct-btn { color: var(--gold); border-color: var(--gold); }
+  /* change-password and create-account dialogs */
+  .dlg { background: var(--panel); color: var(--text); border: 3px solid var(--edge); padding: 18px 20px;
+    box-shadow: 6px 6px 0 #000; width: min(360px, calc(100vw - 32px)); max-height: calc(100vh - 32px); font: inherit; }
+  #acct-dialog { width: min(520px, calc(100vw - 32px)); }
+  .dlg::backdrop { background: rgba(0, 0, 0, 0.7); }
+  .dlg h2 { margin: 0 0 14px; color: var(--gold); }
+  .dlg p.intro { font-size: 8px; line-height: 1.9; color: var(--dim); margin: 0 0 6px; }
+  .dlg label { display: block; font-size: 8px; color: var(--dim); margin: 10px 0 4px; }
+  .dlg input, .dlg textarea { width: 100%; font: 12px/1.4 monospace; padding: 7px 8px; background: #0c0c1a; color: var(--text);
+    border: 2px solid var(--edge); }
+  .dlg textarea { min-height: 110px; resize: vertical; }
+  .dlg input:focus, .dlg textarea:focus { outline: none; border-color: var(--gold); }
+  .dlg input[type=file] { font-size: 10px; padding: 6px; }
+  .dlg .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 480px) { .dlg .pair { grid-template-columns: 1fr; } }
+  #acct-preview { display: none; margin-top: 8px; max-height: 120px; max-width: 100%; border: 2px solid var(--edge); }
+  .dlg .msg { min-height: 1.6em; font-size: 8px; line-height: 1.8; margin-top: 12px; color: var(--red); }
+  .dlg .msg.ok { color: #7fffb2; }
+  .dlg .buttons { margin-top: 10px; justify-content: flex-end; }
+  .dlg .buttons button { padding: 9px 12px; font-size: 9px; }
   .layout { display: grid; grid-template-columns: 1fr 300px; gap: 24px; }
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
-  .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* Equal rows: every card is as tall as the tallest (e.g. RANDOM has no HOME line) */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, 150px); grid-auto-rows: 1fr; gap: 10px; }
+  .grid > .empty { grid-column: 1 / -1; }
   .card { background: var(--panel); border: 3px solid var(--edge); color: var(--text); padding: 8px;
     width: 150px; text-align: left; display: flex; flex-direction: column; gap: 6px; }
   .card:hover { border-color: var(--dim); }
@@ -47,8 +103,24 @@
   .card .portrait { width: 100%; aspect-ratio: 1; background: #000; object-fit: contain; }
   .card .name { font-size: 10px; }
   .card .meta { font-size: 8px; color: var(--dim); line-height: 1.8; }
+  .card .portrait.unknown { display: grid; place-items: center; font-size: 40px; color: var(--dim); }
+  .card.soon { position: relative; cursor: not-allowed; }
+  .card.soon:hover { border-color: var(--edge); }
+  .card.soon > :not(.stamp) { opacity: 0.45; }
+  .card .portrait.campaign { background: url("/assets/map.jpeg") center / cover; image-rendering: pixelated; }
+  .card .stamp { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) rotate(-16deg);
+    color: #e83a3a; border: 3px solid #e83a3a; padding: 6px 8px; font-size: 13px; line-height: 1.4;
+    text-align: center; letter-spacing: 1px; background: rgba(20, 0, 0, 0.35); white-space: nowrap;
+    box-shadow: 0 0 0 1px rgba(232, 58, 58, 0.35), inset 0 0 0 1px rgba(232, 58, 58, 0.35); pointer-events: none; }
+  .stat i.unknown { background: repeating-linear-gradient(90deg, var(--dim) 0 4px, transparent 4px 8px); }
   .stat { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 4px; }
   .stat i { display: block; height: 6px; background: var(--gold); }
+  #difficulty { display: flex; gap: 6px; margin-top: 16px; }
+  #difficulty button { flex: 1; font-size: 10px; padding: 9px 4px; background: var(--panel); color: var(--dim);
+    border: 3px solid var(--edge); }
+  #difficulty button:hover { color: var(--text); border-color: var(--dim); }
+  #difficulty button.selected { color: var(--gold); border-color: var(--gold); }
+  #difficulty button[data-level="hard"].selected { color: #ff6b6b; border-color: #ff6b6b; }
   #fight-btn { width: 100%; margin-top: 16px; font-size: 18px; padding: 14px 28px; background: var(--red); color: #fff;
     border: 3px solid #fff; box-shadow: 4px 4px 0 #000; }
   #fight-btn:disabled { opacity: .4; cursor: default; }
@@ -88,6 +160,16 @@
   #result-score { font-size: 22px; color: var(--gold); margin: 18px 0 6px; }
   #result-detail { color: var(--dim); font-size: 10px; }
   #results aside { text-align: left; margin: 24px 0; }
+  /* Arcade initials entry (guest account) */
+  #initials { margin: 22px 0 6px; }
+  #initials[hidden] { display: none; }
+  #initials .prompt { font-size: 10px; color: var(--dim); margin-bottom: 12px; }
+  #initials .slots { display: flex; gap: 14px; justify-content: center; align-items: center; }
+  #initials .slot { width: 44px; height: 56px; display: grid; place-items: center; font-size: 30px;
+    background: var(--panel); color: var(--gold); border: 3px solid var(--edge); cursor: pointer; }
+  #initials .slot.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+  #initials .hint { font-size: 8px; color: var(--dim); margin-top: 12px; line-height: 2; }
+  #initials-ok { margin-left: 8px; padding: 12px 14px; background: var(--red); color: #fff; border: 3px solid #fff; }
   .buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .buttons button { padding: 12px 18px; background: var(--panel); color: var(--text); border: 3px solid var(--edge); }
   .buttons button:first-child { background: var(--red); border-color: #fff; }
@@ -100,8 +182,59 @@
   <div id="splash-hint"></div>
 </section>
 
+<section id="hiscores" class="screen">
+  <h1>HIGH SCORES</h1>
+  <ol id="hiscore-list"></ol>
+  <div class="press">PRESS ANY KEY</div>
+</section>
+
 <section id="select" class="screen">
-  <header><h1>UNK FIGHTER</h1><span id="user"></span></header>
+  <header><h1>UNK FIGHTER</h1><span class="userbox"><span id="user"></span><button id="pw-btn" class="hdr-btn" hidden>CHANGE PASSWORD</button><button id="acct-btn" class="hdr-btn" hidden>CREATE ACCOUNT</button><button id="logout-btn" class="hdr-btn" hidden>LOG OUT</button></span></header>
+  <dialog id="acct-dialog" class="dlg">
+    <form id="acct-form" method="dialog">
+      <h2>CREATE AN ACCOUNT</h2>
+      <p class="intro">Ask for your own login and your own fighter. An admin reviews each request and builds the
+        fighter from your photo and description, so it won't be instant.</p>
+      <div class="pair">
+        <div><label for="acct-user">USERNAME</label>
+          <input id="acct-user" autocomplete="username" required minlength="3" maxlength="30" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{2,29}"
+                 title="3 to 30 letters, numbers, . _ or -"></div>
+        <div><label for="acct-char">CHARACTER NAME</label>
+          <input id="acct-char" required minlength="2" maxlength="40"></div>
+        <div><label for="acct-pass">PASSWORD (6+ CHARACTERS)</label>
+          <input id="acct-pass" type="password" autocomplete="new-password" minlength="6" required></div>
+        <div><label for="acct-pass2">PASSWORD AGAIN</label>
+          <input id="acct-pass2" type="password" autocomplete="new-password" minlength="6" required></div>
+      </div>
+      <label for="acct-photo">PHOTO FOR YOUR FIGHTER (JPEG, PNG OR WEBP, UP TO 8 MB)</label>
+      <input id="acct-photo" type="file" accept="image/jpeg,image/png,image/webp" required>
+      <img id="acct-preview" alt="">
+      <label for="acct-desc">DESCRIBE YOUR FIGHTER: PERSONALITY, FIGHTING STYLE AND SPECIAL MOVES</label>
+      <textarea id="acct-desc" required minlength="20" maxlength="4000"
+        placeholder="e.g. Grumpy but fair, mostly kicks. Special moves: Coffee Spill, splashes hot coffee across the floor. Reply All, buries the opponent in emails."></textarea>
+      <div class="msg" id="acct-msg"></div>
+      <div class="buttons">
+        <button type="submit" id="acct-send">SEND REQUEST</button>
+        <button type="button" id="acct-cancel">CANCEL</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="pw-dialog" class="dlg">
+    <form id="pw-form" method="dialog">
+      <h2>CHANGE PASSWORD</h2>
+      <label for="pw-current">CURRENT PASSWORD</label>
+      <input id="pw-current" type="password" autocomplete="current-password" required>
+      <label for="pw-new">NEW PASSWORD (6+ CHARACTERS)</label>
+      <input id="pw-new" type="password" autocomplete="new-password" minlength="6" required>
+      <label for="pw-again">NEW PASSWORD AGAIN</label>
+      <input id="pw-again" type="password" autocomplete="new-password" minlength="6" required>
+      <div class="msg" id="pw-msg"></div>
+      <div class="buttons">
+        <button type="submit" id="pw-save">SAVE</button>
+        <button type="button" id="pw-cancel">CANCEL</button>
+      </div>
+    </form>
+  </dialog>
   <div class="layout">
     <main>
       <h2>YOUR FIGHTER</h2>
@@ -115,13 +248,16 @@
       <table id="scores-side"></table>
       <h2>CONTROLS</h2>
       <div class="controls">
-        <b>A / D</b> move · hold back to block<br>
-        <b>W</b> jump · <b>S</b> crouch · <b>S</b>+back block low<br>
+        <b><span class="arrow">←</span> <span class="arrow">→</span></b> move · hold back to block<br>
+        <b><span class="arrow">↑</span></b> jump · <b><span class="arrow">↓</span></b> crouch · <b><span class="arrow">↓</span></b>+back block low<br>
         <b>J</b> or <b>click</b> punch<br>
         <b>K</b> or <b>right click</b> kick<br>
         crouch or jump + punch/kick: low &amp; air attacks<br>
-        <b>S</b> + punch/kick in the air: dive kick<br>
+        <b><span class="arrow">↑</span></b> + punch together: uppercut<br>
+        Being comboed? <b><span class="arrow">↓</span> <span class="arrow">↓</span> <span class="arrow">↑</span></b> then <b><span class="arrow">↑</span></b> + punch: COMBO BREAKER<br>
+        <b><span class="arrow">↓</span></b> + punch/kick in the air: dive kick<br>
         sweeps: block low · air attacks: block standing<br>
+        <b>COMBOS</b>: land hits back to back for big points<br>
         <b>Esc</b> pause · <b>M</b> music · <b>N</b> sound effects (here or paused)<br>
         SPECIALS (<span class="arrow">→</span> = toward opponent)<br>
         <span id="special-help"></span>
@@ -131,6 +267,9 @@
         <div class="frame"><img alt=""><span class="unknown">?</span></div>
         <figcaption></figcaption>
       </figure>
+      <div id="difficulty" role="radiogroup" aria-label="Opponent difficulty">
+        <button data-level="easy">EASY</button><button data-level="medium">MEDIUM</button><button data-level="hard">HARD</button>
+      </div>
       <button id="fight-btn" disabled>FIGHT!</button>
     </div>
   </div>
@@ -144,6 +283,14 @@
   <h1 id="result-title"></h1>
   <div id="result-score"></div>
   <div id="result-detail"></div>
+  <div id="initials" hidden>
+    <div class="prompt">ENTER YOUR INITIALS</div>
+    <div class="slots">
+      <span class="slot">A</span><span class="slot">A</span><span class="slot">A</span>
+      <button id="initials-ok">ENTER</button>
+    </div>
+    <div class="hint">type, or <span class="arrow">↑↓</span> letter · <span class="arrow">←→</span> move · Enter to save</div>
+  </div>
   <aside><h2>HIGH SCORES</h2><table id="scores-results"></table></aside>
   <div class="buttons">
     <button id="rematch-btn">REMATCH</button>

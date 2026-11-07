@@ -24,8 +24,28 @@ Two things are **mounted** instead, so they survive rebuilds and never end up in
 
 - `users.csv`: the logins, `username,password,character` per line. The last item is the fighter
   that user always plays (e.g. `Tonian` or `The Koop`); players only choose their opponent.
-  The first account in the file may pick any fighter.
-- `data/`: the high-score database (`data/scores.db`). Back this folder up.
+  The `guest` account may pick any fighter; its fighter column can be left off (`guest,<password>`).
+- `data/`: the high-score database (`data/scores.db`). Back this folder up. It also holds
+  passwords players changed from the menu (hashed), which replace their `users.csv` password.
+  To undo one, e.g. a forgotten password: `docker exec <container> python server.py --reset-password NAME`
+  (alongside docent the container is `docent-unk-1`).
+- `CharacterRequests/`: account requests from the `guest` login (see below).
+
+## Account requests from guests
+
+Someone logged in as `guest` can press **CREATE ACCOUNT** on the menu and ask for their own
+login and fighter. Each request lands in its own folder, `CharacterRequests/<Character Name>/`:
+
+- `<Character Name>.txt`: their description of the fighter and its moves (the format
+  `add_character.py` reads; the `#` lines at the top say who asked and when)
+- `<Character Name>.jpg` (or `.png` / `.webp`): the photo to build the fighter from
+- `users.csv`: one line, `username,password,Character Name`
+
+Nothing happens automatically. To accept a request: review the text and photo, move the folder
+into `Characters/`, append its `users.csv` line to the main `users.csv`, then run
+`python add_character.py "Characters/<Character Name>"` on your machine, commit, and redeploy.
+To decline one, delete its folder. The folder holds a plain-text password, like `users.csv`,
+so it's kept out of git and the image.
 
 The server needs **no API keys**. Gemini and ElevenLabs are only used by
 `add_character.py` and `make_sounds.py`, which you run on your own machine. After adding

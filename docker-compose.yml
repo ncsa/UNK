@@ -2,7 +2,8 @@
 #
 #   docker compose up --build          # http://localhost:8000
 #
-# users.csv (logins) and data/ (high scores) are mounted, not baked in. users.csv must
+# users.csv (logins), data/ (high scores) and CharacterRequests/ (guests' account requests)
+# are mounted, not baked in. users.csv must
 # exist before the first `up`: if it doesn't, Docker creates a directory in its place.
 # Plain HTTP is fine on localhost; for a server use docker-compose.https.yml (DEPLOY.md),
 # since basic auth sends passwords with every request.
@@ -15,4 +16,5 @@ services:
     volumes:
       - ./users.csv:/app/users.csv:ro
       - ./data:/app/data
+      - ./CharacterRequests:/app/CharacterRequests
     restart: unless-stopped

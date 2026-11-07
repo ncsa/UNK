@@ -15,4 +15,6 @@ Special moves:
 # directions are relative to the opponent (D toward them, A away, W up, S down), then punch
 # (left click or J) or kick (right click or K). e.g.
 # - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!".
-- Laser eyes that burn the player
+- Laser eyes that burn the player, cool down is very low for this so he can use it frequently
+- Shoulder mounted plasma cannon, he positions his body to fire, activating from his wrist computer, cool down is very low for this so he can use it frequently
+- Ultimate move: orbital lasers, activated from his wrist computer, a giant beam comes down from the sky to destroy the other character

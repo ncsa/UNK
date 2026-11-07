@@ -29,6 +29,7 @@
   "throw": "a heavy metal box thrown spinning through the air, powerful whoosh",
   "tick": "a clear loud electronic countdown beep, one short high-pitched tone",
   "time_up": "a short 16-bit buzzer jingle, three descending notes, time is up",
+  "vo_combo_breaker": "COMBO BREAKER!!!",
   "vo_draw": "Draw game!",
   "vo_fight": "FIGHT!",
   "vo_final_round": "Final round!",

@@ -1,0 +1,101 @@
+{
+  "name": "MJ",
+  "slug": "mj",
+  "summary": "A martial artist who utilizes lightning-fast kick maneuvers inspired by classic arcade fighting styles.",
+  "source": {
+    "text": "MJ.txt",
+    "text_hash": "b4313d15a825",
+    "parsed_text": "MJ is ...\n\n\nSpecial moves:\n- Street fighter Chun-Li style rapid kicks\n- Street fighter Guile style spin kick",
+    "image": "MJ.jpeg",
+    "health": 95,
+    "strength": 105,
+    "defense": 100,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 95,
+      "strength": 105,
+      "defense": 100,
+      "reason": "Agile kick-focused martial artist with balanced combat capability"
+    }
+  },
+  "stats": {
+    "health": 95,
+    "punch_damage": 5,
+    "kick_damage": 7,
+    "special_damage": 15,
+    "block": 0.5,
+    "walk_speed": 2.28,
+    "jump_power": 6.78
+  },
+  "ai": {
+    "punch": 0.2,
+    "kick": 0.9,
+    "jump": 0.6,
+    "block": 0.5,
+    "special": 0.7,
+    "aggression": 0.8,
+    "mobility": 0.85
+  },
+  "expressions": {
+    "idle": "focused smirk with intense eyes",
+    "attack": "determined battle grimace",
+    "hit": "pained surprise",
+    "victory": "confident smile with a wink"
+  },
+  "victory_pose": "MJ performs a swift high kick, lands cleanly, and stands proudly with folded arms.",
+  "taunts": [
+    "Is that all you've got?",
+    "Can you keep up with my speed?"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Rapid Kicks",
+      "description": "Street fighter Chun-Li style rapid kicks that strike the opponent repeatedly.",
+      "input": [
+        "S",
+        "D",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "flurry",
+      "shout": "Hyah-hah-hah!",
+      "pose_frames": [
+        "Balancing on one leg while winding up the hips",
+        "Extending the leg repeatedly in a flurry of lightning-fast kicks"
+      ],
+      "height_ratio": 1.0,
+      "prop": null,
+      "prop_size": 1.0
+    },
+    {
+      "id": "special2",
+      "name": "Spin Kick",
+      "description": "Street fighter Guile style acrobatic upside-down spin kick.",
+      "input": [
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "flip",
+      "shout": "Hi-YAH!",
+      "pose_frames": [
+        "Crouching low to store momentum",
+        "Flipping upside-down into the air while sweeping both legs in an arc"
+      ],
+      "height_ratio": 1.2,
+      "prop": null,
+      "prop_size": 1.0
+    }
+  ],
+  "warnings": [],
+  "frame_scale": {
+    "crouch_kick_0": 0.93,
+    "special2_1": 1.05
+  }
+}

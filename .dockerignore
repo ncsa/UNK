@@ -6,6 +6,8 @@ setup.sh
 
 # High scores live in data/, which is mounted so they survive rebuilds.
 data/
+# Guests' account requests (photos, passwords) are mounted, never baked in.
+CharacterRequests/
 
 # Generation inputs and caches the server doesn't read: the raw sprite frames (the built
 # sheets in build/characters are what it serves), raw ElevenLabs audio, audition reels.

@@ -4,7 +4,8 @@
 #   ./docker-run.sh
 #   UNK_PORT=9000 ./docker-run.sh
 #
-# users.csv (logins) and data/ (high scores) are mounted, not baked into the image.
+# users.csv (logins), data/ (high scores) and CharacterRequests/ (guests' account requests)
+# are mounted, not baked into the image.
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -15,7 +16,7 @@ echo "Building $IMAGE…"
 docker build -t "$IMAGE" "$DIR"
 
 mkdir -p "$DIR/data"
-mounts=( -v "$DIR/data:/app/data" )
+mounts=( -v "$DIR/data:/app/data" -v "$DIR/CharacterRequests:/app/CharacterRequests" )
 [ -f "$DIR/users.csv" ] && mounts+=( -v "$DIR/users.csv:/app/users.csv:ro" ) \
     || echo "WARNING: users.csv not found — logins will fail until you add one." >&2
 

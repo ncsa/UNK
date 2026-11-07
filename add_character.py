@@ -147,6 +147,15 @@ ANIMATIONS = {
         ("JUMPING PUNCH in mid-air: knees tucked up, body leaning forward, one arm fully extended forward "
          "and angled down to the right, striking downward. Both feet off the ground", "attack"),
     ]),
+    # Up + punch. Until a character has these frames, the game uses its jump punch.
+    # fits: per-frame sizes; the rising frame's raised fist adds height, so it's drawn taller
+    # for the body to match the standing sprite.
+    "uppercut": dict(fps=12, loop=False, fit=("h", 1.0), fits=[("h", 1.0), ("h", 1.22)], active=[1], optional=True, frames=[
+        ("crouching low with knees bent, one fist pulled down by the hip, about to spring upward into "
+         "an uppercut", "attack"),
+        ("RISING UPPERCUT: springing upward off the ground, the punching arm driving straight up overhead "
+         "with the fist at the top, the other arm down, knees bent, feet just leaving the floor", "attack"),
+    ]),
     "jump_kick": dict(fps=10, loop=False, fit=("idle", 0.5, 1.0), active=[1], optional=True, frames=[
         ("in mid-air during a jump, both knees tucked up toward the chest, about to kick. Exactly two legs, "
          "both feet off the ground", "attack"),
@@ -225,6 +234,12 @@ Rules:
   "bind" (ties up or tangles the opponent's legs so they can only hop slowly for a few seconds),
   "beam" (a continuous ray, e.g. from the eyes or hands, that shoots across the whole screen),
   "uppercut" (a rising jump attack that launches the opponent into the air),
+  "flurry" (a rapid burst of many kicks or punches in place, hitting over and over),
+  "flip" (a crouch then a rising backflip or somersault kick that launches the opponent),
+  "audit" (bureaucratic money trouble: a calculator sprays a fan of numbers across the screen and, if it
+  reaches the opponent, their money bursts out of their pockets and whirls around them, pelting them),
+  "orbital" (a strike from the sky or space: a target locks onto the opponent, then a giant beam or
+  bombardment comes straight down on that spot),
   "dash" (sprints across the whole screen through the opponent),
   "tornado" (becomes a whirlwind that storms across the screen and back; its prop is the whirlwind),
   "cat" (stops fighting to pet an animal, its prop, which runs in from across the screen; heals),
@@ -239,6 +254,9 @@ Rules:
   harder one (5-6 directions). Every move's sequence must differ, and none may appear inside another
   move's sequence (stated or suggested) except at its very end.
   pose_frames: exactly two short pose descriptions (windup, release) for the character performing the move, facing right.
+  Describe only the character's body and anything they hold or wear; the game draws beams, blasts and strikes itself.
+  cooldown: "short" if the text says the move can be used often (low cooldown), "long" for an ultimate or
+  strongest move, otherwise "normal".
   height_ratio: rough figure height vs standing for those frames (crouching ~0.65, standing 1.0).
   prop: a visual description of an object the move summons or throws, drawn on its own, or null if none.
   prop_size: the prop's height relative to the character's height.
@@ -278,12 +296,13 @@ PARSE_SCHEMA = {
             "description": {"type": "string"},
             "input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
             "suggested_input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
-            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
+            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "flurry", "flip", "audit", "orbital", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
             "pose_frames": {"type": "array", "items": {"type": "string"}},
             "height_ratio": {"type": "number"},
             "prop": {"type": ["string", "null"]},
             "prop_size": {"type": "number"},
             "shout": {"type": ["string", "null"]},
+            "cooldown": {"type": "string", "enum": ["short", "normal", "long"]},
         }, "required": ["name", "description", "input", "suggested_input", "effect", "pose_frames",
                         "height_ratio"]}},
         "warnings": {"type": "array", "items": {"type": "string"}},
@@ -545,6 +564,7 @@ def anatomy_problems(img, pose, arms=True):
 # --------------------------------------------------------------------------- parse
 
 STAT_BUDGET, STAT_MIN, STAT_MAX = 300, 70, 150
+COOLDOWNS = {"short": 1.2, "long": 12}  # seconds; "normal" moves share the game's 4 s special cooldown
 CORE_STATS = ("health", "strength", "defense")
 
 
@@ -757,6 +777,8 @@ def stage_parse(folder, reparse):
             "id": f"special{i}", "name": sp["name"], "description": sp["description"], "input": seq,
             "input_source": how,  # stated in the text, suggested by the parser, or stock
             "effect": sp.get("effect", "melee"), "shout": sp.get("shout"),
+            # seconds before it can be used again: short, normal (the shared special cooldown) or long
+            **({"cooldown": COOLDOWNS[sp["cooldown"]]} if sp.get("cooldown") in ("short", "long") else {}),
             "pose_frames": frames, "height_ratio": sp.get("height_ratio") or 1.0,
             "prop": sp.get("prop"), "prop_size": sp.get("prop_size") or 0.5,
         })
@@ -794,6 +816,8 @@ def stage_parse(folder, reparse):
             sp["extra_props"] = old["extra_props"]
         if old.get("effect") == "abduct":
             sp["effect"] = "abduct"
+        if "origin" in old:  # where a projectile leaves the sprite, measured by hand
+            sp["origin"] = old["origin"]
     # Keep fields added by hand (e.g. "proportions"); the parser never writes them.
     for k, v in (existing or {}).items():
         if k not in char and k not in ("draft", "parsed_offline"):
@@ -1056,15 +1080,16 @@ def load_frame(path, max_side=768):
     return img
 
 
-def fit_scale(img, fit, idle_height=None):
-    """Crop to content and scale so the content's height (or width) hits the target.
-    For ("idle", lo, hi), idle_height is the standing frame's unscaled content height."""
+def fit_scale(img, fit, idle_height=None, base=SPRITE_HEIGHT):
+    """Crop to content and scale so the content's height (or width) hits the target, a fraction of
+    base (the character's standing height). For ("idle", lo, hi), idle_height is the standing
+    frame's unscaled content height."""
     img = img.crop(img.getbbox())
     if fit[0] == "idle":
         _, lo, hi = fit
         fit = ("h", min(hi, max(lo, img.height / idle_height)))
     axis, ratio = fit
-    target = SPRITE_HEIGHT * ratio
+    target = base * ratio
     scale = target / (img.height if axis == "h" else img.width)
     size = (max(1, round(img.width * scale)), max(1, round(img.height * scale)))
     small = img.convert("RGBa").resize(size, Image.Resampling.BOX).convert("RGBA")
@@ -1091,7 +1116,7 @@ def apply_palette(img, palette):
     return q
 
 
-def frame_geometry(img, idle_reach, active, lying=False, hurt_h=None):
+def frame_geometry(img, idle_reach, active, lying=False, hurt_h=None, base=SPRITE_HEIGHT):
     """Anchor = feet (center of the lowest opaque rows); boxes are relative to the anchor.
     lying: a body on the ground is drawn in slight perspective, its feet or a hand reaching a few
     pixels below the rest, so anchoring at the lowest pixel left it hovering. Rest it on the
@@ -1107,17 +1132,17 @@ def frame_geometry(img, idle_reach, active, lying=False, hurt_h=None):
         ay = int(np.median(bottoms))
     hurt = [int(-w * 0.35), -h, int(w * 0.7), h]
     if hurt_h:  # crouches: drawn near full size, but only this fraction of standing height can be hit
-        top = min(h, int(SPRITE_HEIGHT * hurt_h))
+        top = min(h, int(base * hurt_h))
         hurt = [hurt[0], -top, hurt[2], top]
     geo = {"ax": ax, "ay": ay, "hurt": hurt, "hit": None}
     if active:
         reach = w - ax
         if reach > idle_reach + 3:
-            x0 = max(ax + idle_reach - 4, w - int(SPRITE_HEIGHT * 0.22))
+            x0 = max(ax + idle_reach - 4, w - int(base * 0.22))
             rows = np.nonzero(a[:, x0:].any(axis=1))[0]
             geo["hit"] = [x0 - ax, int(rows.min()) - ay, w - x0, int(rows.max() - rows.min() + 1)]
         else:  # pose didn't visibly extend; use a generic box in front of the body
-            geo["hit"] = [idle_reach - 6, -int(h * 0.8), int(SPRITE_HEIGHT * 0.25), int(h * 0.3)]
+            geo["hit"] = [idle_reach - 6, -int(h * 0.8), int(base * 0.25), int(h * 0.3)]
     return geo
 
 
@@ -1141,6 +1166,10 @@ def pack(frames, pad=1):
 def stage_sheet(folder, char):
     frames_dir = folder / "frames"
     out = BUILD_DIR / char["slug"]
+    # character.json "stature": standing height relative to everyone else's, e.g. 1.2 for a giant;
+    # every frame, box and prop scales with it.
+    stature = char.get("stature", 1)
+    base = round(SPRITE_HEIGHT * stature)
     (out / "props").mkdir(parents=True, exist_ok=True)
 
     anims = {name: dict(spec) for name, spec in ANIMATIONS.items()}
@@ -1166,12 +1195,18 @@ def stage_sheet(folder, char):
             p = frames_dir / f"{name}_{i}.png"
             if not p.exists():
                 sys.exit(f"sheet: missing {rel(p)}; run the frames stage")
-            imgs.append(fit_scale(raw(f"{name}_{i}"), spec["fit"], idle_height))
+            # character.json "frame_scale" overrides a frame's height as a fraction of the
+            # standing sprite, e.g. {"special2_0": 0.8} for a crouching special pose that the
+            # generator drew as tall as a standing one.
+            fit = spec["fits"][i] if spec.get("fits") else spec["fit"]
+            if f"{name}_{i}" in char.get("frame_scale", {}):
+                fit = ("h", char["frame_scale"][f"{name}_{i}"])
+            imgs.append(fit_scale(raw(f"{name}_{i}"), fit, idle_height, base))
         processed[name] = imgs
 
     palette = build_palette(processed["idle"] + processed["punch"] + processed["kick"])
     idle = processed["idle"][0]
-    idle_reach = idle.width - frame_geometry(idle, 0, False)["ax"]
+    idle_reach = idle.width - frame_geometry(idle, 0, False, base=base)["ax"]
 
     order, meta = [], {}
     for name, imgs in processed.items():
@@ -1180,7 +1215,7 @@ def stage_sheet(folder, char):
         for i, im in enumerate(imgs):
             raw = np.asarray(im).astype(int)  # before the palette, which mutes a bright beam's color
             im = apply_palette(im, palette)
-            geo = frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko", spec.get("hurt_h"))
+            geo = frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko", spec.get("hurt_h"), base)
             if name.startswith("special"):
                 # The highest point (e.g. an uppercut's raised fist) and the front-most point (a fist
                 # thrust forward), relative to the feet, for the game to attach things to.
@@ -1217,14 +1252,14 @@ def stage_sheet(folder, char):
         p = frames_dir / f"prop_{sp['id']}.png"
         if sp["prop"] and p.exists():
             # Its own palette: the fighter's has none of a prop's colors (a white van came out peach).
-            im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", sp["prop_size"]))
+            im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", sp["prop_size"]), base=base)
             im = apply_palette(im, build_palette([im]))
             im.save(out / "props" / f"{sp['id']}.png")
             props[sp["id"]] = f"props/{sp['id']}.png"
         for name, extra in sp.get("extra_props", {}).items():
             p = frames_dir / f"prop_{sp['id']}_{name}.png"
             if p.exists():
-                im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", extra["size"]))
+                im = fit_scale(drop_specks(remove_background(load_frame(p))), ("h", extra["size"]), base=base)
                 im = apply_palette(im, build_palette([im]))
                 im.save(out / "props" / f"{sp['id']}_{name}.png")
                 props[f"{sp['id']}_{name}"] = f"props/{sp['id']}_{name}.png"
@@ -1239,8 +1274,13 @@ def stage_sheet(folder, char):
         apply_palette(fit_scale(sq, ("h", PORTRAIT_SIZE / SPRITE_HEIGHT)), palette).save(out / "portrait.png")
 
     (out / "sheet.json").write_text(json.dumps(
-        {"image": "sheet.png", "height": SPRITE_HEIGHT, "facing": "right", "animations": meta, "props": props},
+        {"image": "sheet.png", "height": base, "facing": "right", "animations": meta, "props": props},
         indent=1) + "\n")
+    if stature != 1:  # hand-measured points are in standard-size pixels
+        char = json.loads(json.dumps(char))
+        for sp in char["specials"]:
+            if sp.get("origin"):
+                sp["origin"] = [round(v * stature) for v in sp["origin"]]
     (out / "character.json").write_text(json.dumps(char, indent=2) + "\n")
     log(f"  sheet: wrote {rel(out)}/ ({len(order)} frames, {len(props)} props)")
 

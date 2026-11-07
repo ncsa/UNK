@@ -21,16 +21,42 @@ const ATTACKS = {
   jump_punch:   { startup: 4, active: 40, recovery: 0, damage: s => s.punch_damage * 1.1, hitstun: 16, push: 2.2, level: "high", air: true },
   jump_kick:    { startup: 6, active: 40, recovery: 0, damage: s => s.kick_damage * 1.1, hitstun: 20, push: 3.0, level: "high", air: true },
   dive_kick:    { startup: 3, active: 60, recovery: 0, damage: s => s.kick_damage, hitstun: 18, push: 2.5, level: "high", air: true },
+  // Combo breaker (S, S, W, then W + punch while being comboed): a huge leaping uppercut.
+  breaker:      { startup: 2, active: 20, recovery: 0, damage: s => s.punch_damage * 2.2, hitstun: 40, push: 4, level: "mid", launch: 8, air: true, box: [-14, -140, 60, 140] },
+  // Up + punch: a rising uppercut that launches. box: its own reach, straight up in front.
+  uppercut:     { startup: 3, active: 14, recovery: 0, damage: s => s.punch_damage * 1.6, hitstun: 26, push: 2, level: "mid", launch: 6.5, air: true, box: [-6, -128, 46, 118] },
 };
 // Animation to show when a character's sheet predates an extended move.
 const FALLBACK_ANIMS = {
   crouch_block: "block", crouch_punch: "punch", crouch_kick: "kick",
-  jump_punch: "punch", jump_kick: "kick", dive_kick: "jump_kick",
+  jump_punch: "punch", jump_kick: "kick", dive_kick: "jump_kick", uppercut: "jump_punch", breaker: "uppercut",
 };
 const LANDING_TICKS = 6;   // recovery after landing from an air attack
 const SPECIAL = { startup: 14, active: 16, recovery: 18, cooldown: 240 };
 const STUN_TICKS = 110;
+// Combos: landed (unblocked) hits each within `window` ticks of the last. Every hit deeper in a
+// combo staggers the victim longer (slower to react), and they're scored 50 x hits^2 (server.py).
+const COMBO = { window: 50, stunPerHit: 0.1, maxStun: 0.8, base: 50, maxScored: 60 };
+const comboPoints = n => COMBO.base * Math.min(n, COMBO.maxScored) ** 2;
+// invuln/cooldown/slowmo in game ticks; slowSpeed: game speed during the slow-motion leap;
+// points: per breaker, before the difficulty multiplier (as in server.py)
+const BREAKER = { invuln: 26, cooldown: 300, jump: 8.5, slowmo: 50, slowSpeed: 0.4, points: 1000 };
 const BEAM = { startup: 14, active: 34, recovery: 14, every: 8, hits: 3 };
+// Flurry: a burst of rapid kicks, one hit every `every` ticks, edging forward to stay in range.
+// damage: the whole flurry's damage as a multiple of special_damage, if every kick lands.
+const FLURRY = { startup: 10, active: 54, recovery: 14, every: 6, hits: 8, damage: 1.3, creep: 0.7 };
+// Flip: crouch, then a rising backflip kick that launches; the sprite turns a full circle in the air.
+const FLIP = { startup: 12, vy: 7.6, vx: 0.5, hitFor: 0.6 };
+// Audit: tap away at a calculator, then a fan of red figures sprays across the screen (block it).
+// If it reaches the opponent their money bursts out of their pockets and whirls around them for
+// `whirl` ticks, hitting them `whirlHits` times (unblockable), before it blows away.
+// sprayDamage / whirlDamage: per hit, as a fraction of special_damage.
+// Orbital: call down a strike from the sky. A target reticle follows the opponent (slower than they
+// can run, so it can be outrun) for `track` ticks, locks for `lock`, then a giant beam hits that spot.
+// damage: x special_damage; unblockable, but dodgeable by getting out from under it.
+const ORBITAL = { startup: 18, track: 44, follow: 1.9, lock: 24, strike: 40, hitFor: 14, width: 54, damage: 2.2, recovery: 16 };
+const AUDIT = { startup: 20, speed: 7, hold: 30, recovery: 16, cash: 46, sprayDamage: 0.5,
+                whirl: 150, whirlHits: 5, whirlDamage: 0.25 };
 
 // ---------------------------------------------------------------- helpers
 
@@ -68,20 +94,63 @@ class Fighter {
     this.stats = char.stats;
     this.isPlayer = isPlayer;
     this.rounds = 0;
+    // For the score: health left at the end of each round won, and how many special moves
+    // landed (each use counts once, however many times it hits).
+    this.roundHealth = [];
+    this.specialsLanded = 0; this.specialRun = 0; this.countedRun = 0;
+    this.combos = [];  // lengths of the combos (2+ hits) this fighter landed this match
+    this.breakers = 0;  // combo breakers this fighter pulled off this match
+  }
+
+  // The combo breaker works only while the opponent's combo on this fighter is still alive.
+  canBreak() {
+    return this.breakerCooldown === 0 && this.lastAttacker?.combo >= 2 &&
+      !["ko", "victory", "defeat"].includes(this.state) && !this.hidden && !this.held;
+  }
+
+  comboBreaker(opp, match) {
+    opp.endCombo();
+    this.special = null; this.bound = 0; this.floating = false;
+    this.setState("breaker");
+    this.facing = opp.x >= this.x ? 1 : -1;
+    this.vy = BREAKER.jump; this.y = Math.max(this.y, 0.01); this.vx = this.facing * 1.5;
+    this.airAttacked = true;
+    this.invuln = BREAKER.invuln;  // can't be hit while it comes out
+    this.breakerCooldown = BREAKER.cooldown;
+    this.breakers++;
+    match.comboBreakerFx(this);
+  }
+
+  // A hit landed on the opponent at match tick `now`: extend the combo or start a new one.
+  comboHit(now) {
+    if (this.combo > 0 && now - this.comboLast <= COMBO.window) this.combo++;
+    else { this.endCombo(); this.combo = 1; }
+    this.comboLast = now;
+    if (this.combo >= 2) this.comboShow = { n: this.combo, t: 0, done: false };
+    return this.combo;
+  }
+
+  endCombo() {
+    if (this.combo >= 2) {
+      this.combos.push(this.combo);
+      this.comboShow = { n: this.combo, t: 0, done: true };
+      if (this.combo >= 4) sfx("menu_select");
+    }
+    this.combo = 0;
   }
 
   reset(x, facing) {
     Object.assign(this, {
       x, y: 0, vx: 0, vy: 0, facing, health: this.stats.health, trail: this.stats.health,
-      state: "idle", t: 0, hasHit: false, hitCount: 0, stunFor: 0, cooldown: 0,
-      special: null, shout: null, holdingBack: false, holdingDown: false, airAttacked: false, hidden: false, held: false, stretch: 0, bound: 0, ghosts: [], passThrough: false, floating: false,
+      state: "idle", t: 0, hasHit: false, hitCount: 0, stunFor: 0, cooldown: 0, cooldowns: {},
+      special: null, shout: null, combo: 0, comboLast: -999, comboShow: null, lastAttacker: null, invuln: 0, breakerCooldown: 0, holdingBack: false, holdingDown: false, airAttacked: false, hidden: false, held: false, stretch: 0, bound: 0, auditDone: 0, ghosts: [], passThrough: false, floating: false,
     });
   }
 
   setState(state) {
     if (this.state === state) return;
     if (this.state === "dizzy") this.sleepy = false;
-    if (this.special && this.state === this.special.id) { this.floating = false; this.passThrough = false; this.ghosts = []; this.cat = null; this.stopT = 0; }
+    if (this.special && this.state === this.special.id) { this.floating = false; this.passThrough = false; this.ghosts = []; this.cat = null; this.stopT = 0; this.auditDone = 0; }
     this.state = state; this.t = 0; this.hasHit = false; this.hitCount = 0;
   }
 
@@ -109,6 +178,16 @@ class Fighter {
       anim = k < 0 ? this.anim("idle") : this.anim(s); i = k < 15 ? 0 : 1;
     } else if (s.startsWith("special") && this.special?.effect === "charge") {
       anim = this.anim("jump");
+    } else if (s.startsWith("special") && this.special?.effect === "orbital") {
+      anim = this.anim(s); i = this.t < ORBITAL.startup ? 0 : 1;  // keying it in, then calling it down
+    } else if (s.startsWith("special") && this.special?.effect === "audit") {
+      anim = this.anim(s); i = this.t < AUDIT.startup ? 0 : 1;  // typing, then holding the calculator out
+    } else if (s.startsWith("special") && this.special?.effect === "flip") {
+      anim = this.anim(s); i = this.t < FLIP.startup ? 0 : 1;  // crouch, then the flip frame from take-off
+    } else if (s.startsWith("special") && this.special?.effect === "flurry") {
+      // wind up (frame 0), then flicker between the chambered leg and the blur of kicks
+      const k = this.t - FLURRY.startup;
+      anim = this.anim(s); i = k < 0 || k >= FLURRY.active ? 0 : (Math.floor(k / 3) % 3 === 2 ? 0 : 1);
     } else if (s.startsWith("special")) {
       anim = this.anim(s); i = this.t < SPECIAL.startup ? 0 : 1;
     } else if (s === "dizzy") {
@@ -298,24 +377,44 @@ class Fighter {
     }
     if (t >= BEAM.startup + BEAM.active) return;
     const fade = Math.min(1, (BEAM.startup + BEAM.active - t) / 6);
-    const b = this.beamBox(camX), x = b.x - camX, mid = b.y + b.h / 2;
-    const wobble = (t % 4 < 2) ? 1 : 0;
+    const b = this.beamLine(camX), wobble = (t % 4 < 2) ? 1 : 0;
+    const len = Math.abs(b.x1 - b.x0) * Math.hypot(1, b.slope);
+    ctx.save();
     ctx.globalAlpha = fade;
-    ctx.fillStyle = "rgba(255,40,40,0.35)"; ctx.fillRect(x, mid - b.h / 2 - 2 - wobble, b.w, b.h + 4 + wobble * 2);
-    ctx.fillStyle = "#ff2a2a"; ctx.fillRect(x, mid - b.h / 2 + 1, b.w, Math.max(2, b.h - 2));
-    ctx.fillStyle = "#ffd0d0"; ctx.fillRect(x, mid - 1, b.w, 1 + wobble);
-    ctx.globalAlpha = 1;
+    ctx.translate(Math.round(b.x0 - camX), b.y0);
+    ctx.scale(this.facing, 1);
+    ctx.rotate(Math.atan(b.slope));  // angled down at a shorter opponent
+    ctx.fillStyle = "rgba(255,40,40,0.35)"; ctx.fillRect(0, -b.h / 2 - 2 - wobble, len, b.h + 4 + wobble * 2);
+    ctx.fillStyle = "#ff2a2a"; ctx.fillRect(0, -b.h / 2 + 1, len, Math.max(2, b.h - 2));
+    ctx.fillStyle = "#ffd0d0"; ctx.fillRect(0, -1, len, 1 + wobble);
+    ctx.restore();
   }
 
-  // The beam from the front edge of the sprite to the edge of the screen (world coordinates).
-  beamBox(camX) {
+  // The beam from the front edge of the sprite to the edge of the screen (world coordinates):
+  // from (x0, y0) to x1, thickness h, dropping `slope` px per px (see aimBeam).
+  beamLine(camX) {
     const f = this.currentFrame();
     // edge: rows and starting column of the beam drawn in the sprite (see add_character.py);
     // the beam is drawn from there, over the sprite's own (palette-muted) one.
     const [top, bottom, from] = f.edge || [-Math.round(f.h * 0.86), -Math.round(f.h * 0.82)];
-    const start = this.x + this.facing * (from ?? f.w - f.ax - 1);
-    const end = this.facing > 0 ? camX + W : camX;
-    return { x: Math.min(start, end), y: GROUND - this.y + top - 1, w: Math.abs(end - start), h: bottom - top + 2 };
+    const x0 = this.x + this.facing * (from ?? f.w - f.ax - 1);
+    return { x0, y0: GROUND - this.y + (top + bottom) / 2, x1: this.facing > 0 ? camX + W : camX,
+             h: bottom - top + 2, slope: this.beamSlope || 0 };
+  }
+
+  // A beam fired over the opponent's head (a giant's eyes) tilts down to their upper chest; aimed
+  // once as it fires, so ducking afterwards still dodges it.
+  aimBeam(opp, camX) {
+    this.beamSlope = 0;
+    const b = this.beamLine(camX), hb = opp.hurtBox(), dx = Math.abs(opp.x - b.x0);
+    if (b.y0 + b.h / 2 < hb.y + 4 && dx > 20) this.beamSlope = clamp((hb.y + hb.h * 0.25 - b.y0) / dx, 0, 0.5);
+  }
+
+  beamHits(opp, camX) {
+    const b = this.beamLine(camX), hb = opp.hurtBox();
+    if ((opp.x - b.x0) * this.facing < 0 || (opp.x - b.x1) * this.facing > 0) return false;
+    const y = b.y0 + b.slope * Math.abs(opp.x - b.x0);
+    return y + b.h / 2 > hb.y && y - b.h / 2 < hb.y + hb.h;
   }
 
   // Roughly where a raised wand's tip is: the sprite's top front corner.
@@ -335,8 +434,16 @@ class Fighter {
   update(input, opp, match) {
     this.t++;
     if (this.held) return;  // inside an abduct special's vehicle
+    if (this.invuln > 0) this.invuln--;
+    if (this.breakerCooldown > 0) this.breakerCooldown--;
+    if (input.breaker && this.canBreak()) return this.comboBreaker(opp, match);
     if (this.bound > 0) this.bound--;  // legs taped by a bind special
     if (this.cooldown > 0 && --this.cooldown === 0 && this.isPlayer) sfx("ready");
+    for (const id in this.cooldowns) {
+      // only the long ones announce themselves; a quick move would chime constantly
+      if (this.cooldowns[id] > 0 && --this.cooldowns[id] === 0 && this.isPlayer &&
+          this.char.specials.find(s => s.id === id)?.cooldown >= 5) sfx("ready");
+    }
     if (this.shout && --this.shout.t <= 0) this.shout = null;
     this.holdingBack = input.move === -this.facing && !this.airborne;
     this.holdingDown = !!input.crouch && !this.airborne;
@@ -390,10 +497,21 @@ class Fighter {
 
   handleInput(input, opp) {
     if (!this.airborne) this.facing = opp.x >= this.x ? 1 : -1;
-    if (input.special && this.cooldown === 0) return this.startSpecial(input.special);
+    if (input.special && this.specialReady(input.special)) return this.startSpecial(input.special);
     if (input.attack) {
       // punch / kick become the crouching, jumping or diving version by stance.
       let move = input.attack;
+      // Up + punch together: an uppercut. Up held on the ground, or punch in the first few frames
+      // of a jump (up pressed a hair earlier), both count.
+      const uppercut = move === "punch" && !input.crouch && !this.airAttacked &&
+        ((!this.airborne && input.jump && !this.bound) || (this.state === "jump" && this.t <= 6));
+      if (uppercut) {
+        this.setState("uppercut");
+        this.airAttacked = true;
+        this.vy = Math.max(this.vy, 6.4); this.y = Math.max(this.y, 0.01); this.vx = this.facing * 1.2;
+        sfx("punch_whoosh", { x: this.x });
+        return;
+      }
       if (this.airborne) {
         if (this.airAttacked) return;    // one attack per jump
         this.airAttacked = true;
@@ -423,10 +541,18 @@ class Fighter {
     }
   }
 
+  // A special with its own "cooldown" (seconds, character.json) runs on its own timer; the rest
+  // share one, so using any of them blocks the others for SPECIAL.cooldown.
+  specialReady(sp) {
+    return sp.cooldown ? !(this.cooldowns[sp.id] > 0) : this.cooldown === 0;
+  }
+
   startSpecial(sp) {
     this.special = sp;
+    this.specialRun++;
     this.setState(sp.id);
-    this.cooldown = SPECIAL.cooldown;
+    if (sp.cooldown) this.cooldowns[sp.id] = Math.round(sp.cooldown * 60);
+    else this.cooldown = SPECIAL.cooldown;
     if (!this.airborne) this.vx = 0;
     if (sp.shout) this.shout = { text: sp.shout, t: 100 };
     sfx("special", { x: this.x });
@@ -459,9 +585,8 @@ class Fighter {
     }
     if (sp.effect === "beam") {
       const on = t >= BEAM.startup && t < BEAM.startup + BEAM.active;
-      if (t === BEAM.startup) sfx("throw", { x: this.x });
-      if (on && (t - BEAM.startup) % BEAM.every === 0 && this.hitCount < BEAM.hits &&
-          overlap(this.beamBox(match.camX()), opp.hurtBox())) {
+      if (t === BEAM.startup) { sfx("throw", { x: this.x }); this.aimBeam(opp, match.camX()); }
+      if (on && (t - BEAM.startup) % BEAM.every === 0 && this.hitCount < BEAM.hits && this.beamHits(opp, match.camX())) {
         this.hitCount++;
         opp.receive(this, Math.ceil(dmg / BEAM.hits), match, { hitstun: 14, push: 1.5 });
       }
@@ -473,6 +598,67 @@ class Fighter {
     }
     if (sp.effect === "dash" || sp.effect === "tornado") return this.updateRun(sp, opp, match);
     if (sp.effect === "cat") return this.updateCat(sp, opp, match);
+    if (sp.effect === "orbital") {
+      if (t < ORBITAL.startup && t % 4 === 0) sfx("tick", { x: this.x });  // keying in the command
+      if (t === ORBITAL.startup) match.spawnOrbital(this, opp);
+      // keep the fist raised until the strike is over
+      if (t > ORBITAL.startup && t < 400 && match.orbitals.some(o => o.owner === this)) return;
+      if (t >= ORBITAL.startup && !this.auditDone) this.auditDone = t;
+      if (this.auditDone && t >= this.auditDone + ORBITAL.recovery) {
+        this.auditDone = 0;
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState("idle");
+      }
+      return;
+    }
+    if (sp.effect === "audit") {
+      if (t < AUDIT.startup && t % 4 === 0) sfx("tick", { x: this.x });  // keys beeping
+      if (t === AUDIT.startup) match.spawnAudit(this, opp);
+      // hold the calculator out while the tape is running
+      if (t > AUDIT.startup && t < 400 && match.audits.some(a => a.owner === this && a.state !== "fall")) return;
+      if (t >= AUDIT.startup && !this.auditDone) this.auditDone = t;
+      if (this.auditDone && t >= this.auditDone + AUDIT.recovery) {
+        this.auditDone = 0;
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState("idle");
+      }
+      return;
+    }
+    if (sp.effect === "flurry") {
+      const k = t - FLURRY.startup;
+      if (k >= 0 && k < FLURRY.active) {
+        this.vx = this.facing * FLURRY.creep;
+        if (k % FLURRY.every === 0) {
+          if (k % (FLURRY.every * 2) === 0) sfx("kick_whoosh", { x: this.x });
+          if (this.hitCount < FLURRY.hits && overlap(this.worldBox([0, -100, 72, 84]), opp.hurtBox())) {
+            this.hitCount++;
+            const last = this.hitCount === FLURRY.hits;
+            opp.receive(this, Math.max(1, Math.round(dmg * FLURRY.damage / FLURRY.hits)), match,
+                        last ? { hitstun: 24, push: 4.5 } : { hitstun: 13, push: 0.6 });
+          }
+        }
+      } else this.vx = 0;
+      if (k >= FLURRY.active + FLURRY.recovery) {
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState("idle");
+      }
+      return;
+    }
+    if (sp.effect === "flip") {
+      // Crouch, spring straight up in a backflip with the legs sweeping up in front, launching the opponent.
+      if (t === FLIP.startup && !this.airborne) { this.vy = FLIP.vy; this.y = 0.01; this.vx = this.facing * FLIP.vx; }
+      const air = t - FLIP.startup, airtime = 2 * FLIP.vy / GRAVITY;
+      if (air >= 0 && air < airtime * FLIP.hitFor && !this.hasHit &&
+          overlap(this.worldBox([-8, -135, 62, 135]), opp.hurtBox())) {
+        this.hasHit = true;
+        opp.receive(this, dmg, match, { hitstun: 36, push: 3, launch: 7 });
+      }
+      if (air > 2 && !this.airborne) {
+        this.facing = opp.x >= this.x ? 1 : -1;
+        this.setState("crouch");  // land in a crouch, then the usual controls take over
+      }
+      return;
+    }
     if (sp.effect === "uppercut") {
       // Leap up and forward, fist (and claws) first, launching the opponent.
       if (t === s.startup && !this.airborne) { this.vy = 6.8; this.y = 0.01; this.vx = this.facing * 1.6; }
@@ -528,8 +714,10 @@ class Fighter {
     }
   }
 
-  receive(attacker, damage, match, { hitstun = 16, push = 2.5, stun = 0, unblockable = false, launch = 0, level = "mid" } = {}) {
-    if (["ko", "victory", "defeat"].includes(this.state) || this.hidden || this.held) return;
+  // basic: an ordinary punch or kick; anything else is a special move (for the score).
+  receive(attacker, damage, match, { hitstun = 16, push = 2.5, stun = 0, unblockable = false, launch = 0, level = "mid", basic = false } = {}) {
+    if (["ko", "victory", "defeat"].includes(this.state) || this.hidden || this.held || this.invuln > 0) return;
+    this.lastAttacker = attacker;
     // Hold back to block; hold back and down to block low. Lows must be blocked crouching,
     // attacks from the air standing.
     const low = this.holdingDown;
@@ -538,12 +726,20 @@ class Fighter {
     const box = this.hurtBox();
     const sparkX = attacker.x < this.x ? box.x + 4 : box.x + box.w - 4;
     if (blocking) {
+      attacker.endCombo();  // a blocked hit ends the attacker's combo
       this.health -= damage * (1 - this.stats.block);
       this.setState(low ? "crouch_block" : "block"); this.stunFor = 10;
       this.vx = push * 0.6 * Math.sign(this.x - attacker.x || attacker.facing);
       match.spark(sparkX, box.y + 30, true);
       sfx("block", { x: this.x });
     } else {
+      if (!basic && attacker.countedRun !== attacker.specialRun) {  // a special move landed
+        attacker.specialsLanded++; attacker.countedRun = attacker.specialRun;
+      }
+      this.endCombo();  // getting hit ends your own combo
+      const chain = attacker.comboHit(match.clock);
+      // Deeper in a combo, the victim reels longer before they can act again.
+      hitstun = Math.round(hitstun * (1 + Math.min(COMBO.maxStun, COMBO.stunPerHit * (chain - 1))));
       this.health -= damage;
       if (stun) { this.setState("dizzy"); this.stunFor = stun; sfx("dizzy", { x: this.x }); }
       else { this.setState("hit"); this.stunFor = hitstun; }
@@ -560,6 +756,48 @@ class Fighter {
       this.setState("ko");
       this.vy = 4.5; this.y = Math.max(this.y, 0.01);
       this.vx = 2.5 * Math.sign(this.x - attacker.x || attacker.facing);
+    }
+  }
+
+  // How far through a flip special's backflip this fighter is (0..1), or null when not flipping.
+  flipProgress() {
+    if (!(this.special?.effect === "flip" && this.state === this.special.id)) return null;
+    const air = this.t - FLIP.startup;
+    return air < 0 ? null : clamp(air / (2 * FLIP.vy / GRAVITY), 0, 1);
+  }
+
+  // The flip frame (drawn upside down) turns a full backward circle about the body's middle:
+  // upright at take-off, upside down at the top, upright again on landing; the kicking feet
+  // leave a crescent trail.
+  drawFlip(ctx, f, img, px, py, p) {
+    const R = 52, cy = py - 52;
+    const rot = p => Math.PI - 2 * Math.PI * p;  // decreasing: the head goes back, away from the opponent
+    const feet = p => rot(p) - Math.PI / 2;      // the feet point "up" in the drawn frame
+    ctx.save();
+    ctx.translate(px, cy);
+    if (this.facing < 0) ctx.scale(-1, 1);
+    if (p < 0.85) {
+      const from = Math.max(0, p - 0.4);
+      for (const [w, color] of [[9, "rgba(120,200,255,0.35)"], [4, "rgba(230,248,255,0.85)"]]) {
+        ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.arc(0, 0, R, feet(p), feet(from)); ctx.stroke();
+      }
+    }
+    ctx.rotate(rot(p));
+    ctx.drawImage(img, f.x, f.y, f.w, f.h, -Math.round(f.w / 2), -Math.round(f.h / 2), f.w, f.h);
+    ctx.restore();
+    if (this.shout) drawBubble(ctx, this.shout.text, px, cy - R - 8);
+  }
+
+  // Speed lines across the kicking zone while the flurry is on.
+  drawFlurry(ctx, f, px, py) {
+    const k = this.t - FLURRY.startup;
+    if (k < 0 || k >= FLURRY.active) return;
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    for (let i = 0; i < 4; i++) {
+      const r = Math.sin((k + i * 7) * 12.9898) * 43758.5453, u = r - Math.floor(r);  // cheap per-tick jitter
+      const y = py - Math.round(f.h * (0.35 + 0.45 * u)), x = 18 + Math.round(u * 20), len = 14 + Math.round(u * 18);
+      ctx.fillRect(this.facing > 0 ? px + x : px - x - len, y, len, 1);
     }
   }
 
@@ -596,6 +834,9 @@ class Fighter {
       ctx.restore();
     }
 
+    const flipP = this.flipProgress();
+    if (flipP !== null) return this.drawFlip(ctx, f, img, px, py, flipP);
+
     ctx.save();
     ctx.translate(px, py);
     if (this.state === "ko" && !this.airborne && this.char.sheetData.animations.ko === undefined) ctx.rotate(Math.PI / 2);
@@ -618,10 +859,26 @@ class Fighter {
     if (this.special?.effect === "beam" && this.state === this.special.id) this.drawBeam(ctx, camX, f, px, py);
     if (inSpecial && this.special.effect === "tornado" && this.t >= SPECIAL.startup) this.drawTornado(ctx, px, false);
     if (inSpecial && this.cat) this.drawCat(ctx, camX, py);
+    if (inSpecial && this.special.effect === "flurry") this.drawFlurry(ctx, f, px, py);
     const top = py - f.ay;
     if (this.state === "dizzy") (this.sleepy ? drawZzz : drawDizzy)(ctx, px, top - 6, this.t);
     if (this.shout) drawBubble(ctx, this.shout.text, px, top - 8, camX);
   }
+}
+
+function drawStar(ctx, x, y, r, rot, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rot);
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 ? r * 0.45 : r, a = i * Math.PI / 5 - Math.PI / 2;
+    ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = "#000"; ctx.lineWidth = 1; ctx.stroke();
+  ctx.restore();
 }
 
 function drawZzz(ctx, x, y, t) {
@@ -632,6 +889,21 @@ function drawZzz(ctx, x, y, t) {
     outlinedText(ctx, "Z", Math.round(x + 6 + k * 0.5 + i * 2), Math.round(y - k), "#cfe3ff");
   }
   ctx.globalAlpha = 1;
+}
+
+// A tumbling dollar bill (flat when edge-on) or a glinting coin.
+function drawCash(ctx, x, y, bill, spin) {
+  if (bill) {
+    const flat = Math.sin(spin) > 0;
+    ctx.fillStyle = "#14401d"; ctx.fillRect(x - 6, y - (flat ? 3 : 1), 12, flat ? 6 : 2);
+    if (flat) {
+      ctx.fillStyle = "#7fcf7a"; ctx.fillRect(x - 5, y - 2, 10, 4);
+      ctx.fillStyle = "#2f7a3a"; ctx.fillRect(x - 1, y - 1, 2, 2);  // the portrait oval
+    } else { ctx.fillStyle = "#7fcf7a"; ctx.fillRect(x - 5, y - 1, 10, 1); }
+  } else {
+    ctx.fillStyle = "#6a4e08"; ctx.fillRect(x - 2, y - 2, 4, 4);
+    ctx.fillStyle = Math.sin(spin * 1.6) > 0 ? "#ffe066" : "#d9a520"; ctx.fillRect(x - 2, y - 2, 3, 3);
+  }
 }
 
 function drawTape(ctx, x, feetY, bodyW, left) {
@@ -686,13 +958,18 @@ function drawBubble(ctx, text, x, bottom) {
 
 // ---------------------------------------------------------------- input
 
+// The arrow keys work the same as W A S D.
+const ARROW_KEYS = { ArrowUp: "w", ArrowLeft: "a", ArrowDown: "s", ArrowRight: "d" };
+const keyName = e => ARROW_KEYS[e.key] || e.key.toLowerCase();
+
 class PlayerInput {
   constructor() {
     this.keys = new Set();
     this.buffer = [];        // recent {token, time} for special-move sequences
     this.pending = null;     // {attack|special, expires}
     this.onKeyDown = e => {
-      const k = e.key.toLowerCase();
+      const k = keyName(e);
+      if (ARROW_KEYS[e.key]) e.preventDefault();  // don't scroll the page mid-fight
       if (k.length !== 1) return;
       if (ATTACK_KEYS[k]) {               // J punch, K kick (same tokens as the mouse buttons)
         if (!e.repeat) this.attack(ATTACK_KEYS[k]);
@@ -702,7 +979,7 @@ class PlayerInput {
       if (!e.repeat) this.push(this.relative(k.toUpperCase()));
       this.keys.add(k);
     };
-    this.onKeyUp = e => this.keys.delete(e.key.toLowerCase());
+    this.onKeyUp = e => this.keys.delete(keyName(e));
     this.onMouse = e => {
       if (e.button !== 0 && e.button !== 2) return;
       e.preventDefault();
@@ -739,6 +1016,11 @@ class PlayerInput {
 
   attack(token) {
     this.push(token);
+    if (token === "LMB" && this.isBreaker()) {
+      this.pending = { breaker: true, expires: performance.now() + 250 };
+      this.buffer = [];
+      return;
+    }
     const sp = this.matchSpecial();
     this.pending = sp ? { special: sp, expires: performance.now() + 150 }
                       : { attack: token === "LMB" ? "punch" : "kick", expires: performance.now() + 150 };
@@ -748,6 +1030,19 @@ class PlayerInput {
     const now = performance.now();
     this.buffer.push({ token, time: now });
     this.buffer = this.buffer.filter(b => now - b.time < 2000).slice(-10);
+  }
+
+  // Combo breaker: S, S, W, then W and punch together (W pressed just before the punch, or held).
+  isBreaker() {
+    const b = this.buffer, n = b.length, now = performance.now();
+    if (n < 4 || b[n - 1].token !== "LMB") return false;
+    const i = n - 2;
+    if (b[i].token !== "W" || !(now - b[i].time < 200 || this.keys.has("w"))) return false;
+    const tokens = (from, to) => b.slice(from, to).map(x => x.token).join("");
+    // S, S, W, W+punch
+    if (i >= 3 && tokens(i - 3, i) === "SSW" && b[i].time - b[i - 3].time < SEQ_GAP * 3) return true;
+    // or S, S, W held down through the punch
+    return i >= 2 && tokens(i - 2, i + 1) === "SSW" && this.keys.has("w") && b[i].time - b[i - 2].time < SEQ_GAP * 2;
   }
 
   matchSpecial() {
@@ -774,7 +1069,12 @@ class PlayerInput {
   // Called after the fighter has seen the input, so a buffered press survives until it can act.
   consume(fighter) {
     if (!this.pending) return {};
-    if (!fighter.canAct || (this.pending.special && fighter.cooldown > 0)) return {};
+    if (this.pending.breaker) {  // usable mid-combo, when nothing else is
+      if (fighter.canBreak()) { this.pending = null; return { breaker: true }; }
+      if (fighter.canAct) { this.pending = null; return { attack: "punch" }; }  // not being comboed: W + punch, an uppercut
+      return {};
+    }
+    if (!fighter.canAct || (this.pending.special && !fighter.specialReady(this.pending.special))) return {};
     const p = this.pending; this.pending = null;
     return p.special ? { special: p.special } : { attack: p.attack };
   }
@@ -782,16 +1082,34 @@ class PlayerInput {
 
 // ---------------------------------------------------------------- AI
 
+// Opponent difficulty. easy is the original AI. block, special, breaker: multipliers on how often it
+// blocks, uses specials and combo-breaks; think: on its pauses between moves; aggression: added to
+// the trait; chain: chance an attack is followed straight into another (2-3 hit strings);
+// damage: on its punch, kick and special damage. The score bonus for each is in server.py.
+const DIFFICULTY = {
+  easy:   { label: "EASY",   block: 1,   think: 1,    aggression: 0,    special: 1,   breaker: 1, chain: 0,    damage: 1 },
+  medium: { label: "MEDIUM", block: 1.3, think: 0.6,  aggression: 0.15, special: 1.3, breaker: 2, chain: 0.35, damage: 1.15 },
+  hard:   { label: "HARD",   block: 1.6, think: 0.35, aggression: 0.3,  special: 1.6, breaker: 4, chain: 0.65, damage: 1.3 },
+};
+
 class AI {
-  // Uses the character's trait weights (0..1): punch, kick, jump, block, special, aggression, mobility.
-  constructor(fighter) {
+  // Uses the character's trait weights (0..1): punch, kick, jump, block, special, aggression, mobility,
+  // adjusted for the difficulty level.
+  constructor(fighter, level = "easy") {
     this.f = fighter;
-    this.tr = fighter.char.ai;
+    this.lv = DIFFICULTY[level] || DIFFICULTY.easy;
+    const tr = fighter.char.ai;
+    this.tr = { ...tr, aggression: Math.min(1, tr.aggression + this.lv.aggression),
+                special: Math.min(1, tr.special * this.lv.special) };
     this.queue = [];
   }
 
   input(opp) {
     const f = this.f, tr = this.tr;
+    // Combo breaker: short combos rarely, longer ones more and more likely (and more so for
+    // fighters with a high block trait).
+    if (f.canBreak() && opp.combo >= 3 &&
+        Math.random() < (0.002 + 0.006 * tr.block) * (opp.combo - 2) * this.lv.breaker) return { breaker: true };
     const toward = opp.x >= f.x ? 1 : -1;
     const dist = Math.abs(opp.x - f.x);
 
@@ -800,7 +1118,7 @@ class AI {
     const threatened = (opp.attacking && dist < 95 && opp.t < 4) || this.incoming;
     if (threatened && !this.blockRolled) {
       this.blockRolled = true;
-      if (Math.random() < tr.block * 0.75) {
+      if (Math.random() < Math.min(0.95, tr.block * 0.75 * this.lv.block)) {
         const level = ATTACKS[opp.state]?.level || "mid";
         const low = level === "low" ? Math.random() < 0.85 : level === "high" ? Math.random() < 0.15 : Math.random() < 0.4;
         this.queue = [{ in: { move: -toward, crouch: low }, ticks: 22 }];
@@ -818,10 +1136,10 @@ class AI {
     }
     if (!f.canAct) return {};
 
-    const specials = f.char.specials.filter(() => f.cooldown === 0);
-    const ranged = specials.filter(s => ["projectile", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport"].includes(s.effect));
-    const close = specials.filter(s => ["melee", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
-    const think = Math.round(rand(6, 22) * (1.3 - tr.aggression));
+    const specials = f.char.specials.filter(s => f.specialReady(s));
+    const ranged = specials.filter(s => ["projectile", "beam", "audit", "orbital", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport"].includes(s.effect));
+    const close = specials.filter(s => ["melee", "flurry", "flip", "uppercut", "orbital", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
+    const think = Math.round(rand(6, 22) * (1.3 - tr.aggression) * this.lv.think);
     let action;
     if (dist > 70) {
       action = weightedPick([
@@ -836,6 +1154,7 @@ class AI {
         { v: "punch", w: tr.punch * 1.1 },
         { v: "kick", w: tr.kick * 1.1 },
         { v: "lowpunch", w: tr.punch * 0.5 },
+        { v: "uppercut", w: tr.punch * 0.35 },
         { v: "sweep", w: tr.kick * 0.5 },
         { v: "close", w: close.length ? tr.special * 0.5 : 0 },
         { v: "block", w: tr.block * 0.4 },
@@ -856,6 +1175,7 @@ class AI {
       jumpback: [{ in: { move: "away", jump: true }, ticks: 1 }],
       punch: [{ in: { attack: "punch" }, ticks: 1 }, { in: {}, ticks: think }],
       kick: [{ in: { attack: "kick" }, ticks: 1 }, { in: {}, ticks: think }],
+      uppercut: [{ in: { jump: true, attack: "punch" }, ticks: 1 }, { in: {}, ticks: think }],
       lowpunch: [{ in: { crouch: true }, ticks: 2 }, { in: { crouch: true, attack: "punch" }, ticks: 1 },
                  { in: { crouch: true }, ticks: think }],
       sweep: [{ in: { crouch: true }, ticks: 2 }, { in: { crouch: true, attack: "kick" }, ticks: 1 },
@@ -863,6 +1183,16 @@ class AI {
       ranged: [{ in: { special: pick(ranged) }, ticks: 1 }, { in: {}, ticks: 20 }],
       close: [{ in: { special: pick(close) }, ticks: 1 }, { in: {}, ticks: 20 }],
     };
+    // Harder levels follow a landed-range attack straight into another, as a string (each waits for
+    // the previous one to finish, then goes inside the combo window).
+    if (["punch", "kick", "lowpunch"].includes(action)) {
+      for (let n = 0; n < 2 && Math.random() < this.lv.chain; n++) {
+        const last = plans[action].pop(), prev = action === "kick" ? ATTACKS.kick : ATTACKS.punch;
+        const next = Math.random() < tr.kick ? "kick" : "punch";
+        plans[action].push({ in: { crouch: action === "lowpunch" }, ticks: prev.startup + prev.active + prev.recovery + 1 },
+                           { in: { attack: next, crouch: action === "lowpunch" }, ticks: 1 }, last);
+      }
+    }
     this.queue = plans[action].map(s => ({ ...s, in: { ...s.in } }));
     return {};
   }
@@ -877,8 +1207,10 @@ const music = {
   muted: (() => { try { return localStorage.getItem("unk.muted") === "1"; } catch { return false; } })(),
 
   play(src) {
+    if (src && this.audio && this.src === src) return;  // already playing it: keep going
     this.stop();
     if (!src) return;
+    this.src = src;
     this.audio = new Audio(src);
     this.audio.loop = true;
     this.audio.volume = MUSIC_VOLUME;
@@ -896,6 +1228,7 @@ const music = {
   },
   stop() {
     if (this.audio) { this.audio.pause(); this.audio.src = ""; this.audio = null; }
+    this.src = null;
   },
   duck(on) {
     if (this.audio) this.audio.volume = on ? MUSIC_VOLUME * 0.3 : MUSIC_VOLUME;
@@ -910,16 +1243,26 @@ const music = {
 // ---------------------------------------------------------------- match
 
 class Match {
-  constructor({ player, opponent, arena, arenaImg, onEnd }) {
+  constructor({ player, opponent, arena, arenaImg, onEnd, difficulty = "easy" }) {
     this.canvas = $("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
     this.arena = arena; this.arenaImg = arenaImg;
-    this.stageWidth = Math.max(W, arenaImg.width);
+    // The arena image's edges are the stage's hard edges. The server builds arenas at least
+    // screen-wide; an older, narrower one is stretched to fill the screen rather than leaving
+    // black space fighters could walk into.
+    this.arenaW = Math.max(W, arenaImg.width);
+    this.stageWidth = this.arenaW;
     this.p1 = new Fighter(player, true);
     this.p2 = new Fighter(opponent, false);
+    const lv = DIFFICULTY[difficulty] || DIFFICULTY.easy;
+    if (lv.damage !== 1) {  // its own copy: the character's stats are shared
+      const st = this.p2.stats;
+      this.p2.stats = { ...st, punch_damage: st.punch_damage * lv.damage, kick_damage: st.kick_damage * lv.damage,
+                        special_damage: st.special_damage * lv.damage };
+    }
     this.input = new PlayerInput();
-    this.ai = new AI(this.p2);
+    this.ai = new AI(this.p2, difficulty);
     this.onEnd = onEnd;
     this.round = 0;
     this.totalTicks = 0;
@@ -958,7 +1301,8 @@ class Match {
     const mid = this.stageWidth / 2;
     this.p1.reset(mid - 70, 1);
     this.p2.reset(mid + 70, -1);
-    this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.tapes = []; this.slideshows = []; this.rains = [];
+    this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.tapes = []; this.slideshows = []; this.rains = []; this.audits = []; this.orbitals = [];
+    this.stars = []; this.breakerBanner = null; this.flash = 0;
     this.phase = "intro"; this.phaseT = 0;
     this.timer = ROUND_SECONDS; this.timerTicks = 0;
     this.shake = 0; this.banner = null;
@@ -973,9 +1317,11 @@ class Match {
     if (!this.running) return;
     this.acc = Math.min(this.acc + (now - this.last), 250);
     this.last = now;
-    while (this.acc >= TICK) {
-      if (!this.paused) this.update();
-      this.acc -= TICK;
+    // During a combo breaker's slow-motion leap each game tick takes longer in real time.
+    let step;
+    while (this.acc >= (step = this.slowmo > 0 ? TICK / BREAKER.slowSpeed : TICK)) {
+      if (!this.paused) { this.update(); if (this.slowmo > 0) this.slowmo--; }
+      this.acc -= step;
     }
     this.draw();
     requestAnimationFrame(this.frame.bind(this));
@@ -983,6 +1329,11 @@ class Match {
 
   update() {
     this.phaseT++;
+    this.clock = (this.clock || 0) + 1;
+    for (const f of [this.p1, this.p2]) {
+      if (f.combo && this.clock - f.comboLast > COMBO.window) f.endCombo();
+      if (f.comboShow && ++f.comboShow.t > (f.comboShow.done ? 80 : 999)) f.comboShow = null;
+    }
     const { p1, p2 } = this;
     const live = this.phase === "fight";
 
@@ -1011,6 +1362,12 @@ class Match {
     this.updateCharges();
     this.updateAbducts();
     this.updateTapes();
+    this.updateAudits();
+    this.updateOrbitals();
+    for (const s of this.stars) { s.t++; s.x += s.vx; s.y += s.vy; s.vy += 0.12; s.spin += 0.2; }
+    this.stars = this.stars.filter(s => s.t < 60 && s.y < GROUND + 10);
+    if (this.flash > 0) this.flash--;
+    if (this.breakerBanner && ++this.breakerBanner.t > 110) this.breakerBanner = null;
     this.updateSlideshows();
     this.updateRains();
     this.puffs = this.puffs.filter(p => ++p.t < 30);
@@ -1060,10 +1417,11 @@ class Match {
 
   endRound(reason) {
     const { p1, p2 } = this;
+    p1.endCombo(); p2.endCombo();
     this.phase = "roundEnd"; this.phaseT = 0; this.banner = reason;
     this.projectiles = []; this.drops = [];
     for (const c of this.charges) if (!c.dropped) this.dropOff(c);  // the vehicle keeps driving off
-    this.tapes = []; this.slideshows = []; this.rains = [];
+    this.tapes = []; this.slideshows = []; this.rains = []; this.audits = []; this.orbitals = [];
     for (const f of [p1, p2]) f.bound = 0;
     for (const a of this.abducts) if (a.target.held) { a.target.held = false; a.target.y = 0; a.target.setState("idle"); }
     this.abducts = [];
@@ -1071,6 +1429,7 @@ class Match {
     const r1 = p1.health / p1.stats.health, r2 = p2.health / p2.stats.health;
     if (r1 > r2) winner = p1; else if (r2 > r1) winner = p2;
     this.roundWinner = winner;
+    if (winner) winner.roundHealth.push(Math.max(1, Math.round(winner.health)));
     if (winner) winner.rounds++;
     for (const f of [p1, p2]) if (f !== winner && f.state !== "ko") f.setState("idle");
   }
@@ -1082,6 +1441,10 @@ class Match {
       quit,
       won,
       health_left: Math.max(won ? 1 : 0, Math.round(this.p1.health)),
+      round_health: this.p1.roundHealth,         // health left after each round the player won
+      specials_landed: this.p1.specialsLanded,
+      combos: (this.p1.endCombo(), this.p1.combos),  // lengths of the player's 2+ hit combos
+      breakers: this.p1.breakers,
       duration: Math.max(3, Math.round(this.totalTicks / 60)),
       rounds: [this.p1.rounds, this.p2.rounds],
     });
@@ -1092,9 +1455,9 @@ class Match {
     if (!atk || a.hasHit) return;
     if (d.floating && !atk.air) return;  // ground attacks pass under a floating fighter
     if (a.t < atk.startup || a.t >= atk.startup + atk.active) return;
-    if (overlap(a.hitBox(), d.hurtBox())) {
+    if (overlap(atk.box ? a.worldBox(atk.box) : a.hitBox(), d.hurtBox())) {
       a.hasHit = true;
-      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push, level: atk.level, launch: atk.launch || 0 });
+      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push, level: atk.level, launch: atk.launch || 0, basic: true });
       if (a.state === "dive_kick") { a.vy = 3.6; a.vx = -a.facing * 1.8; }  // bounce off
     }
   }
@@ -1115,14 +1478,21 @@ class Match {
     const h = img ? img.height : 24, w = img ? img.width : 24;
     this.projectiles.push({
       owner, sp, img, w, h, angle: 0,
-      x: owner.x + owner.facing * 30, y: GROUND - owner.y - 70, vx: 4 * owner.facing,
+      // origin: [forward, up] from the feet where the shot leaves (character.json), e.g. a shoulder cannon
+      x: owner.x + owner.facing * (sp.origin ? sp.origin[0] : 30), y: GROUND - owner.y + (sp.origin ? sp.origin[1] : -70),
+      vx: 4 * owner.facing, vy: 0,
     });
+    // A shot fired from above the opponent's head (a giant's shoulder cannon) angles down to their
+    // chest, aimed as it's fired: crouching afterwards still ducks it.
+    const p = this.projectiles[this.projectiles.length - 1], target = owner === this.p1 ? this.p2 : this.p1;
+    const hb = target.hurtBox(), dx = Math.abs(target.x - p.x);
+    if (p.y < hb.y + 10 && dx > 20) p.vy = clamp((hb.y + hb.h * 0.3 - p.y) / (dx / Math.abs(p.vx)), 0, 1.5);
     sfx("throw", { x: owner.x });
   }
 
   updateProjectiles() {
     for (const p of this.projectiles) {
-      p.x += p.vx; p.angle += 0.15;
+      p.x += p.vx; p.y += p.vy || 0; p.angle += 0.15;
       const target = p.owner === this.p1 ? this.p2 : this.p1;
       const box = { x: p.x - p.w / 2, y: p.y - p.h / 2, w: p.w, h: p.h };
       if (!p.done && overlap(box, target.hurtBox())) {
@@ -1387,6 +1757,22 @@ class Match {
     }
   }
 
+  // Combo breaker: white flash, stars bursting out of the breaker, the banner and the announcer.
+  comboBreakerFx(f) {
+    this.flash = 14;
+    this.shake = 14;
+    this.breakerBanner = { t: 0, points: f === this.p1 };
+    this.slowmo = BREAKER.slowmo;
+    const cx = f.x, cy = GROUND - f.y - 60;
+    for (let i = 0; i < 30; i++) {
+      const a = (i / 30) * Math.PI * 2 + Math.random() * 0.2, v = 2.5 + Math.random() * 4;
+      this.stars.push({ x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 1.5, t: 0,
+                        r: 3 + Math.random() * 3, spin: Math.random() * 6, gold: Math.random() < 0.7 });
+    }
+    sfx("hit_heavy", { x: f.x });
+    sfx("vo_combo_breaker");
+  }
+
   // Bind specials: the prop (a strip of tape) shoots along the ground; if it catches the
   // opponent's feet their legs are bound: slow hops, no jumping. Jump it, or block it crouching.
   spawnTape(owner, sp) {
@@ -1413,6 +1799,214 @@ class Match {
       if (Math.abs(tp.x - tp.start) > 230) tp.done = true;
     }
     this.tapes = this.tapes.filter(tp => !tp.done);
+  }
+
+  // Orbital specials: see ORBITAL.
+  spawnOrbital(owner, target) {
+    this.orbitals.push({ owner, target, x: target.x, phase: "track", t: 0, hit: false });
+  }
+
+  updateOrbitals() {
+    for (const o of this.orbitals) {
+      o.t++;
+      if (o.phase === "track") {
+        o.x += clamp(o.target.x - o.x, -ORBITAL.follow, ORBITAL.follow);
+        if (o.t % 8 === 0) sfx("tick", { x: o.x });
+        if (o.t >= ORBITAL.track) { o.phase = "lock"; o.t = 0; }
+      } else if (o.phase === "lock") {
+        if (o.t % 4 === 0) sfx("tick", { x: o.x });
+        if (o.t >= ORBITAL.lock) {
+          o.phase = "strike"; o.t = 0;
+          sfx("special", { x: o.x }); sfx("slam", { x: o.x });
+          this.shake = 16; this.flash = 10;
+        }
+      } else if (o.phase === "strike") {
+        const target = o.target;
+        if (!o.hit && o.t <= ORBITAL.hitFor && this.phase === "fight" && target.state !== "ko") {
+          const hb = target.hurtBox(), half = ORBITAL.width / 2;
+          if (hb.x < o.x + half && hb.x + hb.w > o.x - half) {
+            o.hit = true;
+            target.receive(o.owner, Math.round(o.owner.stats.special_damage * ORBITAL.damage), this,
+                           { hitstun: 40, push: 3, launch: 6, unblockable: true });
+          }
+        }
+        if (o.t % 3 === 0 && o.t < ORBITAL.strike - 8) this.spark(o.x + rand(-20, 20), GROUND - rand(0, 24), false);
+        if (o.t >= ORBITAL.strike) o.done = true;
+      }
+    }
+    this.orbitals = this.orbitals.filter(o => !o.done);
+  }
+
+  // "ground": the target reticle under the fighters; "beam": the strike, over them.
+  drawOrbitals(ctx, camX, layer) {
+    for (const o of this.orbitals) {
+      const x = Math.round(o.x - camX);
+      if (layer === "ground" && o.phase !== "strike") {
+        const locked = o.phase === "lock", blink = locked && o.t % 6 < 3;
+        const r = locked ? 18 : 24 - Math.sin(o.t * 0.25) * 3;
+        ctx.strokeStyle = blink ? "#fff" : "#ff3030"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(x, GROUND - 1, r, r * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(x, GROUND - 1, r * 0.45, r * 0.13, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = ctx.strokeStyle;
+        for (let k = 0; k < 4; k++) {  // turning tick marks
+          const a = o.t * 0.08 + k * Math.PI / 2;
+          ctx.fillRect(Math.round(x + Math.cos(a) * (r + 4)) - 1, Math.round(GROUND - 1 + Math.sin(a) * (r + 4) * 0.28) - 1, 3, 2);
+        }
+        // a thin targeting laser from the sky
+        ctx.fillStyle = `rgba(255,60,60,${locked ? 0.55 : 0.25 + (o.t % 10 < 5 ? 0.1 : 0)})`;
+        ctx.fillRect(x, 0, 1, GROUND - 2);
+      }
+      if (layer === "beam" && o.phase === "strike") {
+        const k = o.t;
+        const grow = Math.min(1, k / 4), fade = Math.min(1, (ORBITAL.strike - k) / 12);
+        const w = Math.round(ORBITAL.width * grow * (0.7 + 0.3 * fade) + (k % 4 < 2 ? 2 : 0));
+        ctx.globalAlpha = fade;
+        for (const [ww, color] of [[w + 18, "rgba(255,40,40,0.3)"], [w, "rgba(255,42,42,0.7)"], [w * 0.5, "rgba(255,170,170,0.6)"], [w * 0.22, "rgba(255,255,255,0.85)"]]) {
+          ctx.fillStyle = color; ctx.fillRect(Math.round(x - ww / 2), 0, Math.round(ww), GROUND + 2);
+        }
+        ctx.fillStyle = "rgba(255,230,230,0.8)";  // the impact splash on the ground
+        ctx.beginPath(); ctx.ellipse(x, GROUND, w * 0.9 + k, 6 + k * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // Audit specials: see AUDIT. The numbers spray from the calculator, held out at the sprite's top front.
+  spawnAudit(owner, target) {
+    const f = owner.currentFrame();
+    const x0 = owner.x + owner.facing * (f.w - f.ax - 6), y = GROUND - owner.y - f.ay + Math.round(f.h * 0.2);
+    this.audits.push({ owner, target, dir: owner.facing, x0, y, len: 0, state: "out", t: 0,
+                       digits: [], swirl: [], cash: [], whirl: 0, whirlHits: 0, stamp: 0 });
+    sfx("throw", { x: owner.x });
+  }
+
+  // The fan's leading edge: as tall as the figures have spread by then.
+  auditFront(a) {
+    const tip = a.x0 + a.dir * a.len, h = Math.min(80, 10 + a.len * 0.42);
+    return { x: Math.min(tip, tip - a.dir * AUDIT.speed), y: a.y - h / 2, w: AUDIT.speed + 2, h };
+  }
+
+  updateAudits() {
+    const camX = this.camX();
+    for (const a of this.audits) {
+      a.t++;
+      const target = a.target, owner = a.owner, dmg = owner.stats.special_damage;
+      if (a.state === "out") {
+        a.len += AUDIT.speed;
+        // keep spraying figures from the calculator, fanning out wide as they go
+        const spread = Math.random() - 0.5;
+        a.digits.push({ x: a.x0, y: a.y + spread * 3, vx: a.dir * (AUDIT.speed - 0.6 + Math.random() * 1.4),
+                        vy: spread * 3.2, ch: "0123456789$%"[Math.floor(Math.random() * 12)], life: 999 });
+        if (this.phase === "fight" && target.state !== "ko" && overlap(this.auditFront(a), target.hurtBox())) {
+          const blocked = target.state === "block" || target.state === "crouch_block";
+          target.receive(owner, Math.max(1, Math.round(dmg * AUDIT.sprayDamage)), this, { hitstun: 24, push: 1 });
+          a.state = "hit"; a.t = 0;
+          if (!blocked && target.state !== "ko") {
+            target.shout = { text: "MY MONEY!", t: 80 };
+            a.stamp = 1; a.whirl = 1;
+            sfx("slam", { x: target.x });
+            for (let i = 0; i < AUDIT.cash; i++) {  // their pockets empty into a whirlwind around them
+              a.swirl.push({ ang: Math.random() * Math.PI * 2, r: 20 + Math.random() * 16, hf: Math.random(),
+                             speed: 0.13 + Math.random() * 0.09, rise: 0.004 + Math.random() * 0.006,
+                             bill: i % 3 !== 2, spin: Math.random() * 6 });
+            }
+          }
+        }
+        if (a.state === "out" && (a.x0 + a.dir * a.len < camX - 10 || a.x0 + a.dir * a.len > camX + W + 10)) {
+          a.state = "fall"; a.t = 0;
+        }
+      } else if (a.state === "hit" && a.t > AUDIT.hold) {
+        a.state = "fall"; a.t = 0;  // ChuckT is free again; the whirlwind carries on
+      }
+      if (a.stamp) a.stamp++;
+
+      if (a.whirl) {
+        a.whirl++;
+        for (const c of a.swirl) { c.ang += c.speed; c.hf = (c.hf + c.rise) % 1; c.spin += 0.2; }
+        const every = Math.floor(AUDIT.whirl / AUDIT.whirlHits);
+        if (a.whirl % every === 0 && a.whirlHits < AUDIT.whirlHits && this.phase === "fight" && target.state !== "ko") {
+          a.whirlHits++;
+          target.receive(owner, Math.max(1, Math.round(dmg * AUDIT.whirlDamage)), this,
+                         { hitstun: 16, push: 0.3, unblockable: true });
+        }
+        if (a.whirl > AUDIT.whirl || target.state === "ko") {  // the whirlwind blows itself out
+          const h = target.hurtBox();
+          for (const c of a.swirl) {
+            a.cash.push({ x: target.x + Math.cos(c.ang) * c.r, y: h.y + h.h * (1 - c.hf),
+                          vx: Math.cos(c.ang) * (1.5 + Math.random() * 2), vy: -1.5 - Math.random() * 2.5,
+                          bill: c.bill, spin: c.spin, life: 60 + Math.random() * 30 });
+          }
+          a.swirl = []; a.whirl = 0;
+        }
+      }
+
+      for (const d of a.digits) {
+        d.x += d.vx; d.y += d.vy;
+        if (a.state !== "out" && d.life > 20) d.life = 20;  // stream cut off: the rest fizzle out
+        d.life--;
+        if (a.state === "hit" && Math.abs(d.x - target.x) < 14) { d.vx *= -0.3; d.vy = (Math.random() - 0.5) * 3; }
+      }
+      a.digits = a.digits.filter(d => d.life > 0 && d.x > camX - 20 && d.x < camX + W + 20 && d.y < GROUND);
+      for (const c of a.cash) {
+        c.x += c.vx; c.y += c.vy; c.life--;
+        c.vy += c.bill ? 0.08 : 0.25;
+        if (c.bill) { c.vx *= 0.97; c.vy = Math.min(c.vy, 0.9); }  // bills flutter down
+        if (c.y > GROUND - 1) { c.y = GROUND - 1; c.vy *= -0.35; c.vx *= 0.6; }
+      }
+      a.cash = a.cash.filter(c => c.life > 0);
+      if (a.state === "fall" && a.t > 30 && !a.whirl && !a.cash.length && !a.digits.length) a.done = true;
+    }
+    this.audits = this.audits.filter(a => !a.done);
+  }
+
+  // layer "back": the far half of the whirlwind, behind the fighters; "front": everything else.
+  drawAudits(ctx, camX, layer) {
+    for (const a of this.audits) {
+      const h = a.target.hurtBox();
+      if (a.whirl) {  // wind streaks circling the opponent, the far side faint
+        const fade = Math.min(1, a.whirl / 10, (AUDIT.whirl - a.whirl) / 15);
+        for (let k = 0; k < 4; k++) {
+          const y = h.y + h.h * (0.15 + 0.23 * k), r = 30 + (k % 2) * 5, spin = a.whirl * 0.22 + k * 1.7;
+          ctx.strokeStyle = `rgba(235,245,230,${(layer === "back" ? 0.25 : 0.6) * fade})`; ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.ellipse(Math.round(a.target.x - camX), Math.round(y), r, 6, 0,
+                      layer === "back" ? Math.PI + spin % 1 : spin % 1, (layer === "back" ? Math.PI : 0) + spin % 1 + 2.2);
+          ctx.stroke();
+        }
+      }
+      for (const c of a.swirl) {
+        if ((Math.sin(c.ang) < 0) !== (layer === "back")) continue;
+        const x = a.target.x + Math.cos(c.ang) * c.r, y = h.y + h.h * (1 - c.hf);
+        drawCash(ctx, Math.round(x - camX), Math.round(y), c.bill, c.spin);
+      }
+      if (layer === "back") continue;
+      ctx.font = `8px ${FONT}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      if (a.state === "out") {  // the calculator's display glowing
+        ctx.fillStyle = `rgba(255,60,60,${0.35 + (a.t % 4 < 2 ? 0.2 : 0)})`;
+        ctx.beginPath(); ctx.arc(Math.round(a.x0 - camX), a.y, 5, 0, Math.PI * 2); ctx.fill();
+      }
+      for (const d of a.digits) {
+        const x = Math.round(d.x - camX), y = Math.round(d.y);
+        ctx.globalAlpha = Math.min(1, d.life / 20);
+        ctx.fillStyle = "#5a0000"; ctx.fillText(d.ch, x + 1, y + 1);  // dark edge so each figure reads
+        ctx.fillStyle = d.ch === "$" || d.ch === "%" ? "#ffb0b0" : "#ff2e2e";
+        ctx.fillText(d.ch, x, y);
+      }
+      ctx.globalAlpha = 1;
+      for (const c of a.cash) drawCash(ctx, Math.round(c.x - camX), Math.round(c.y), c.bill, c.spin + c.life * 0.3);
+      if (a.stamp && a.stamp < 60) {  // a red AUDITED stamp slams onto the opponent
+        const k = Math.min(1, a.stamp / 6), sc = 2.2 - 1.2 * k;
+        ctx.save();
+        ctx.translate(Math.round(a.target.x - camX), Math.round(h.y + 26));
+        ctx.rotate(-0.2); ctx.scale(sc, sc);
+        ctx.globalAlpha = a.stamp > 45 ? (60 - a.stamp) / 15 : 0.95;
+        ctx.strokeStyle = "#d42020"; ctx.lineWidth = 1.5; ctx.strokeRect(-34, -8, 68, 16);
+        ctx.fillStyle = "#d42020"; ctx.fillText("AUDITED", 0, 1);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 
   // Stun specials: the prop drops onto the opponent (or a flash when there's no prop image).
@@ -1458,10 +2052,14 @@ class Match {
 
     ctx.save();
     ctx.translate(0, shakeY);
-    ctx.drawImage(this.arenaImg, -camX, 0, this.arenaImg.width, H);
+    ctx.drawImage(this.arenaImg, -camX, 0, this.arenaW, H);
     for (const a of this.abducts) if (a.phase === "plane") this.drawVehicle(ctx, a, a.plane, 34, camX);  // behind the faller
     this.drawSlideshows(ctx);
+    this.drawAudits(ctx, camX, "back");
+    this.drawOrbitals(ctx, camX, "ground");
     for (const f of [p2, p1]) f.draw(ctx, camX);
+    this.drawAudits(ctx, camX, "front");
+    this.drawOrbitals(ctx, camX, "beam");
     this.drawRains(ctx, camX);
 
     for (const p of this.projectiles) {
@@ -1546,10 +2144,25 @@ class Match {
       }
       ctx.stroke();
     }
+    for (const s of this.stars) drawStar(ctx, s.x - camX, s.y, s.r, s.spin, s.gold ? "#ffd23f" : "#fff", 1 - s.t / 60);
     if (this.debug) this.drawDebug(ctx, camX);
     ctx.restore();
 
     this.drawHUD(ctx);
+    if (this.flash) { ctx.fillStyle = `rgba(255,255,255,${this.flash / 14 * 0.85})`; ctx.fillRect(0, 0, W, H); }
+    if (this.breakerBanner) {
+      const t = this.breakerBanner.t, jitter = t < 30 ? (t % 4 < 2 ? 2 : -2) : 0;
+      const zoom = t < 8 ? 1.6 - t * 0.075 : 1;
+      if (!(t > 95 && t % 6 < 3)) {
+        ctx.save();
+        ctx.translate(W / 2 + jitter, 112);  // mid-screen, clear of the combo counters
+        ctx.scale(zoom, zoom);
+        ctx.textAlign = "center";
+        ctx.font = `20px ${FONT}`; outlinedText(ctx, "COMBO BREAKER!!!", 0, 8, t % 8 < 4 ? "#ff4040" : "#ffd23f", 3);
+        if (this.breakerBanner.points && t > 12) { ctx.font = `10px ${FONT}`; outlinedText(ctx, `+${BREAKER.points}`, 0, 26, "#7fffb2", 2); }
+        ctx.restore();
+      }
+    }
     if (this.banner) {
       ctx.font = `24px ${FONT}`; ctx.textAlign = "center";
       outlinedText(ctx, this.banner, W / 2, H / 2 - 10, this.banner === "K.O." ? "#ff4040" : "#ffd23f", 3);
@@ -1592,13 +2205,30 @@ class Match {
         ctx.strokeStyle = "#000"; ctx.strokeRect(sx + 0.5, top + barH + 5.5, 6, 6);
       }
     }
+    // Combo counters, under each fighter's health bar
+    for (const [f, x, side] of bars) {
+      const c = f.comboShow;
+      if (!c) continue;
+      const tx = side < 0 ? x : x + barW, y = top + barH + 52;  // below the name
+      ctx.textAlign = side < 0 ? "left" : "right";
+      const pop = c.t < 6 ? 1 + (6 - c.t) * 0.06 : 1;  // each new hit pops the number
+      const big = Math.min(26, 14 + c.n * 1.2) * pop;
+      const color = c.n >= 8 ? "#ff5a3c" : c.n >= 5 ? "#ff9d2e" : "#ffd23f";
+      if (c.done && c.t > 60 && c.t % 6 < 3) continue;  // blink out
+      ctx.font = `${Math.round(big)}px ${FONT}`;
+      outlinedText(ctx, `${c.n}`, tx, y, color, 3);
+      const nx = tx + (side < 0 ? 1 : -1) * (ctx.measureText(`${c.n}`).width + 5);
+      ctx.font = `8px ${FONT}`;
+      outlinedText(ctx, c.done ? "HIT COMBO!" : "HITS", nx, y, "#fff");
+      if (c.done && f === this.p1) outlinedText(ctx, `+${comboPoints(c.n)}`, tx, y + 12, "#7fffb2");
+    }
     // KO badge and timer
     ctx.font = `8px ${FONT}`; ctx.textAlign = "center";
     outlinedText(ctx, "KO", W / 2, top + 8, "#ff4040");
     ctx.font = `16px ${FONT}`;
     outlinedText(ctx, String(Math.max(0, this.timer)).padStart(2, "0"), W / 2, top + 30, "#fff", 2);
     // Special cooldown pip for the player
-    if (this.p1.cooldown === 0 && this.phase === "fight") {
+    if (this.p1.char.specials.some(s => this.p1.specialReady(s)) && this.phase === "fight") {
       ctx.font = `8px ${FONT}`; ctx.textAlign = "left";
       outlinedText(ctx, "SPECIAL READY", 18, H - 6, "#7fffb2");
     }
@@ -1633,6 +2263,20 @@ const SELECTION_MUSIC = "/assets/selection-music";
 function showMenu() {
   show("select");
   music.play(SELECTION_MUSIC);
+  armIdle();
+}
+
+// Attract loop: a minute on the menu with no mouse, key or touch shows the high scores again.
+const IDLE_SECONDS = 60;
+let idleTimer = null;
+function armIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    if ($("select").classList.contains("active") && !app.match && !document.querySelector("dialog[open]")) showHighScores();
+  }, IDLE_SECONDS * 1000);
+}
+for (const ev of ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"]) {
+  window.addEventListener(ev, () => { if ($("select").classList.contains("active")) armIdle(); }, { passive: true });
 }
 
 window.addEventListener("keydown", e => {
@@ -1722,9 +2366,11 @@ function showSpecialHelp() {
 }
 
 function renderScores(table, rows) {
+  // A guest's own line is the one they just signed; everyone else's is their username's.
+  const mine = r => app.me?.choose_any ? r.id === app.signedScore : r.username === app.me?.username;
   table.innerHTML = rows.length ? rows.map((r, i) => `
-    <tr class="${r.username === app.me?.username ? "me" : ""}">
-      <td>${i + 1}.</td><td>${esc(r.username)}</td><td>${esc(r.character)}</td><td>${r.score}</td>
+    <tr class="${mine(r) ? "me" : ""}">
+      <td>${i + 1}.</td><td>${esc(r.name || r.username)}</td><td>${esc(r.character)}</td><td>${r.score}</td>
     </tr>`).join("") : `<tr><td class="empty">No scores yet</td></tr>`;
 }
 
@@ -1738,6 +2384,9 @@ async function initMenu() {
   [app.me, app.characters, app.arenas] = await Promise.all(
     ["/api/me", "/api/characters", "/api/arenas"].map(getJSON));
   $("user").textContent = `${app.me.username.toUpperCase()} · BEST ${app.me.best}`;
+  $("pw-btn").hidden = !app.me.can_change_password;
+  $("acct-btn").hidden = !app.me.can_request_account;
+  $("logout-btn").hidden = !app.me.can_logout;
 
   // The player's fighter is fixed per account (last column of users.csv); only the opponent is chosen.
   const pg = $("player-grid"), og = $("opponent-grid");
@@ -1745,7 +2394,7 @@ async function initMenu() {
   if (!app.characters.length) {
     pg.innerHTML = `<p class="empty">No characters built yet. Run add_character.py.</p>`;
   } else if (app.me.choose_any) {
-    // The first account in users.csv may play anyone.
+    // The guest account may play anyone.
     for (const c of app.characters) pg.append(characterCard(c, "player"));
   } else if (mine) {
     const card = characterCard(mine, "player");
@@ -1761,9 +2410,19 @@ async function initMenu() {
   for (const c of rivals) og.append(characterCard(c, "opponent"));
   const randomCard = document.createElement("button");
   randomCard.className = "card"; randomCard.dataset.value = "random";
-  randomCard.innerHTML = `<div class="portrait" style="display:grid;place-items:center;font-size:40px">?</div><span class="name">RANDOM</span>`;
+  // Same rows as a fighter's card (portrait, name, three stat bars), so it's the same size.
+  const unknownBar = label => `<div class="stat"><span>${label}</span><i class="unknown" style="width:100%"></i></div>`;
+  randomCard.innerHTML = `<div class="portrait unknown">?</div><span class="name">RANDOM</span>
+    <span class="meta">${unknownBar("HP")}${unknownBar("ATK")}${unknownBar("DEF")}</span>`;
   randomCard.onclick = () => { select("opponent", "random"); sfx("menu_move"); };
-  if (rivals.length) og.append(randomCard);
+  // Campaign mode: not built yet, so a stamped, unselectable placeholder (the grid keeps it card height).
+  const campaignCard = document.createElement("button");
+  campaignCard.className = "card soon"; campaignCard.dataset.value = "campaign";
+  campaignCard.setAttribute("aria-disabled", "true"); campaignCard.title = "Campaign mode is coming soon";
+  campaignCard.innerHTML = `<div class="portrait campaign"></div><span class="name">CAMPAIGN</span>
+    <span class="stamp">COMING<br>SOON</span>`;
+  campaignCard.onclick = () => sfx("menu_move");
+  if (rivals.length) og.append(randomCard, campaignCard);
   else og.innerHTML = `<p class="empty">No one to fight yet. Build another character with add_character.py.</p>`;
 
   select("opponent", "random");
@@ -1789,8 +2448,9 @@ async function startMatch(arena) {
     const a = app.arenas.find(x => x.slug === arena) || arenaFor(opponent);
     const [pc, oc, img] = await Promise.all([getCharacter(player), getCharacter(opponent), loadImage(a.image), document.fonts.ready]);
     show("fight");
-    app.lastMatch = { player, opponent, arena: a.slug };
-    app.match = new Match({ player: pc, opponent: oc, arena: a, arenaImg: img, onEnd: r => endMatch(r, pc, oc) });
+    app.lastMatch = { player, opponent, arena: a.slug, difficulty: app.difficulty };
+    app.match = new Match({ player: pc, opponent: oc, arena: a, arenaImg: img, onEnd: r => endMatch(r, pc, oc),
+                           difficulty: app.difficulty });
     app.match.start();
   } catch (e) {
     alert(`Could not load the match: ${e.message}`);
@@ -1800,22 +2460,94 @@ async function startMatch(arena) {
   }
 }
 
+// ---------------------------------------------------------------- guest initials
+
+// After a guest's match, arcade-style initials entry: type letters, or up/down to change the
+// letter and left/right to move; Enter (or the button) saves them on that score.
+const INITIAL_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const initials = { scoreId: null, letters: ["A", "A", "A"], pos: 0 };
+
+function drawInitials() {
+  [...document.querySelectorAll("#initials .slot")].forEach((el, i) => {
+    el.textContent = initials.letters[i];
+    el.classList.toggle("on", i === initials.pos);
+  });
+}
+
+function openInitials(scoreId) {
+  // AAA every time: on a shared machine the last guest's initials belong to someone else.
+  Object.assign(initials, { scoreId, pos: 0, letters: ["A", "A", "A"] });
+  $("initials").hidden = false;
+  drawInitials();
+}
+
+function closeInitials() { $("initials").hidden = true; initials.scoreId = null; }
+
+async function saveInitials() {
+  if (initials.scoreId == null) return;
+  const text = initials.letters.join(""), id = initials.scoreId;
+  closeInitials();
+  try {
+    const r = await fetch(`/api/scores/${id}/initials`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ initials: text }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail);
+    const { rank } = await r.json();
+    app.signedScore = id;
+    $("result-detail").textContent += ` · ${text} is #${rank}`;
+    sfx("menu_select");
+  } catch (e) {
+    $("result-detail").textContent += ` · initials not saved (${e.message})`;
+  }
+  refreshScores();
+}
+
+window.addEventListener("keydown", e => {
+  if ($("initials").hidden || !$("results").classList.contains("active")) return;
+  const k = e.key, cycle = d => {
+    const i = INITIAL_CHARS.indexOf(initials.letters[initials.pos]);
+    initials.letters[initials.pos] = INITIAL_CHARS[(i + d + INITIAL_CHARS.length) % INITIAL_CHARS.length];
+  };
+  if (/^[a-z0-9]$/i.test(k)) { initials.letters[initials.pos] = k.toUpperCase(); initials.pos = Math.min(2, initials.pos + 1); }
+  else if (k === "ArrowUp") cycle(1);
+  else if (k === "ArrowDown") cycle(-1);
+  else if (k === "ArrowLeft" || k === "Backspace") initials.pos = Math.max(0, initials.pos - 1);
+  else if (k === "ArrowRight") initials.pos = Math.min(2, initials.pos + 1);
+  else if (k === "Enter") { e.preventDefault(); saveInitials(); return; }
+  else return;
+  e.preventDefault();
+  sfx("menu_move");
+  drawInitials();
+});
+document.querySelectorAll("#initials .slot").forEach((el, i) => {
+  el.onclick = () => { initials.pos = i; drawInitials(); };
+});
+$("initials-ok").onclick = saveInitials;
+
 async function endMatch(result, pc, oc) {
   app.match = null;
   if (result.quit) { showMenu(); return; }
+  closeInitials();
   show("results");
   $("result-title").textContent = result.won ? "YOU WIN!" : "YOU LOSE";
   $("result-title").style.color = result.won ? "var(--gold)" : "var(--red)";
   $("result-score").textContent = "...";
-  $("result-detail").textContent = `${pc.name} vs ${oc.name} · rounds ${result.rounds.join("-")} · ${result.duration}s`;
+  const best = Math.max(0, ...result.combos);
+  $("result-detail").textContent = `${pc.name} vs ${oc.name} (${DIFFICULTY[app.lastMatch.difficulty].label})` +
+    ` · rounds ${result.rounds.join("-")} · ${result.duration}s` +
+    (best ? ` · best combo ${best} hits` : "") +
+    (result.breakers ? ` · ${result.breakers} combo breaker${result.breakers > 1 ? "s" : ""}` : "");
   try {
     const r = await fetch("/api/scores", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...app.lastMatch, character: app.lastMatch.player, won: result.won,
-                             health_left: result.health_left, duration: result.duration }),
+                             health_left: result.health_left, duration: result.duration,
+                             round_health: result.round_health, specials_landed: result.specials_landed,
+                             combos: result.combos, breakers: result.breakers }),
     }).then(r => r.json());
     $("result-score").textContent = r.score !== undefined ? `${r.score} PTS` : "NO SCORE";
-    if (r.personal_best !== undefined) {
+    if (r.id !== undefined && app.me.choose_any) openInitials(r.id);
+    if (r.personal_best !== undefined && !app.me.choose_any) {  // a guest's "best" spans every guest
       $("result-detail").textContent += ` · best ${r.personal_best} · rank #${r.rank}`;
       app.me.best = r.personal_best;
       $("user").textContent = `${app.me.username.toUpperCase()} · BEST ${app.me.best}`;
@@ -1827,13 +2559,24 @@ async function endMatch(result, pc, oc) {
 }
 
 $("fight-btn").onclick = () => { sfx("menu_select"); startMatch(); };
+
+// Difficulty picker on the selection screen; remembered per browser.
+function setDifficulty(level) {
+  app.difficulty = DIFFICULTY[level] ? level : "easy";
+  for (const b of document.querySelectorAll("#difficulty button")) b.classList.toggle("selected", b.dataset.level === app.difficulty);
+  try { localStorage.setItem("unk.difficulty", app.difficulty); } catch {}
+}
+for (const b of document.querySelectorAll("#difficulty button")) b.onclick = () => { sfx("menu_move"); setDifficulty(b.dataset.level); };
+setDifficulty((() => { try { return localStorage.getItem("unk.difficulty"); } catch { return null; } })());
 $("rematch-btn").onclick = () => {
   sfx("menu_select");
+  closeInitials();
   Object.assign(app.choice, { player: app.lastMatch.player, opponent: app.lastMatch.opponent });
   startMatch(app.lastMatch.arena);
 };
 $("menu-btn").onclick = () => {
   sfx("menu_move");
+  closeInitials();
   select("opponent", app.choice.opponent);
   showMenu();
 };
@@ -1850,10 +2593,10 @@ function runSplash() {
     done = true;
     video.pause();
     window.removeEventListener("keydown", onKey);
-    showMenu();
+    showHighScores();
   };
   const onKey = e => { if (!e.repeat) finish(); };
-  video.onerror = finish;  // no SplashScreen.mp4: straight to the menu
+  video.onerror = finish;  // no SplashScreen.mp4: straight to the high scores
   video.onended = finish;
   $("splash").onclick = () => {
     if (video.muted) { video.muted = false; hint.textContent = ""; }
@@ -1867,5 +2610,170 @@ function runSplash() {
   });
 }
 
+// ---------------------------------------------------------------- log out
+
+// Basic auth has no logout: replace the browser's saved login with a dummy the server accepts only
+// at /api/logout (see server.py), then reload, which the server refuses, so the login prompt returns.
+$("logout-btn").onclick = () => {
+  sfx("menu_move");
+  const xhr = new XMLHttpRequest();
+  xhr.open("GET", "/api/logout", true, "_logout_", "x");
+  xhr.onloadend = () => location.reload();
+  xhr.send();
+};
+
+// ---------------------------------------------------------------- change password
+
+// Logins are HTTP basic auth, so after a change the browser must be told the new password:
+// reloading gets a 401 and the browser asks for it.
+function openPasswordDialog() {
+  const d = $("pw-dialog");
+  $("pw-form").reset(); $("pw-msg").textContent = ""; $("pw-msg").className = "";
+  $("pw-save").textContent = "SAVE"; $("pw-save").disabled = false; delete $("pw-save").dataset.done;
+  $("pw-cancel").hidden = false;
+  for (const id of ["pw-current", "pw-new", "pw-again"]) $(id).disabled = false;
+  d.showModal();
+  $("pw-current").focus();
+}
+
+$("pw-btn").onclick = () => { sfx("menu_move"); openPasswordDialog(); };
+$("pw-cancel").onclick = () => $("pw-dialog").close();
+$("pw-form").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("pw-msg");
+  if ($("pw-save").dataset.done) { location.reload(); return; }  // "LOG IN AGAIN"
+  if ($("pw-new").value !== $("pw-again").value) { msg.textContent = "The new passwords don't match."; return; }
+  $("pw-save").disabled = true; msg.className = ""; msg.textContent = "Saving...";
+  try {
+    const r = await fetch("/api/password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current: $("pw-current").value, new: $("pw-new").value }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const d = body.detail;
+      throw new Error(Array.isArray(d) ? "New password must be 6 to 200 characters." : d || `error ${r.status}`);
+    }
+    msg.className = "ok";
+    msg.textContent = "Password changed. Log in again with your new password.";
+    for (const id of ["pw-current", "pw-new", "pw-again"]) $(id).disabled = true;
+    $("pw-save").textContent = "LOG IN AGAIN"; $("pw-save").dataset.done = "1"; $("pw-save").disabled = false;
+    $("pw-cancel").hidden = true;
+    sfx("menu_select");
+  } catch (err) {
+    msg.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+    $("pw-save").disabled = false;
+  }
+};
+
+// ---------------------------------------------------------------- account requests (guest)
+
+// The guest can ask for an account and a fighter; the server files it for an admin to review.
+const MAX_PHOTO_MB = 8;
+let acctPhoto = null;  // data: URL of the chosen photo
+
+$("acct-btn").onclick = () => {
+  sfx("menu_move");
+  $("acct-form").reset(); acctPhoto = null;
+  $("acct-preview").style.display = "none";
+  $("acct-msg").textContent = ""; $("acct-msg").className = "msg";
+  for (const el of $("acct-form").elements) el.disabled = false;
+  $("acct-send").textContent = "SEND REQUEST"; $("acct-send").hidden = false; $("acct-cancel").textContent = "CANCEL";
+  $("acct-dialog").showModal();
+  $("acct-user").focus();
+};
+$("acct-cancel").onclick = () => $("acct-dialog").close();
+$("acct-photo").onchange = () => {
+  const file = $("acct-photo").files[0];
+  acctPhoto = null; $("acct-preview").style.display = "none"; $("acct-msg").textContent = "";
+  if (!file) return;
+  if (file.size > MAX_PHOTO_MB * 1024 * 1024) { $("acct-msg").textContent = `That photo is over ${MAX_PHOTO_MB} MB.`; $("acct-photo").value = ""; return; }
+  const reader = new FileReader();
+  reader.onload = () => { acctPhoto = reader.result; $("acct-preview").src = acctPhoto; $("acct-preview").style.display = "block"; };
+  reader.readAsDataURL(file);
+};
+$("acct-form").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("acct-msg");
+  if ($("acct-pass").value !== $("acct-pass2").value) { msg.textContent = "The passwords don't match."; return; }
+  if (!acctPhoto) { msg.textContent = "Choose a photo for your fighter."; return; }
+  $("acct-send").disabled = true; msg.className = "msg"; msg.textContent = "Sending...";
+  try {
+    const r = await fetch("/api/account-request", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: $("acct-user").value.trim(), password: $("acct-pass").value,
+                             character: $("acct-char").value.trim(), description: $("acct-desc").value.trim(),
+                             photo: acctPhoto }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const d = body.detail;
+      throw new Error(Array.isArray(d) ? fieldProblem(d[0]) : d || `error ${r.status}`);
+    }
+    msg.className = "msg ok";
+    msg.textContent = `Request sent for ${body.character}! Once an admin approves it, log in as ${$("acct-user").value.trim()}.`;
+    for (const el of $("acct-form").elements) el.disabled = true;
+    $("acct-cancel").disabled = false; $("acct-cancel").textContent = "CLOSE";
+    $("acct-send").hidden = true;
+    sfx("menu_select");
+  } catch (err) {
+    msg.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1) + ".";
+    $("acct-send").disabled = false;
+  }
+};
+
+// The server's field checks, in words.
+function fieldProblem(d) {
+  const field = d?.loc?.[1];
+  return {
+    username: "Username: 3 to 30 letters, numbers, . _ or -",
+    password: "Password: at least 6 characters",
+    character: "Character name: 2 to 40 characters",
+    description: "Description: at least 20 characters (4000 at most)",
+  }[field] || "Please check the form";
+}
+
+// ---------------------------------------------------------------- high scores attract screen
+
+// Between the splash and the menu, arcade style: the top 10 slide in, then the menu after a few
+// seconds (sooner on a key or click).
+const HISCORE_SECONDS = 8;
+const ORDINALS = ["1ST", "2ND", "3RD", "4TH", "5TH", "6TH", "7TH", "8TH", "9TH", "10TH"];
+
+async function showHighScores() {
+  clearTimeout(idleTimer);
+  show("hiscores");
+  music.play(SELECTION_MUSIC);
+  let done = false, timer = null;
+  const finish = () => {
+    if (done) return;
+    done = true; clearTimeout(timer);
+    window.removeEventListener("keydown", onKey);
+    showMenu();
+  };
+  const onKey = e => { if (!e.repeat) finish(); };
+  window.addEventListener("keydown", onKey);
+  $("hiscores").onclick = finish;
+  let rows = [];
+  try {
+    await app.ready;  // characters, for portraits
+    rows = await getJSON("/api/scores?limit=10");
+  } catch {}
+  if (done) return;
+  const portrait = slug => app.characters?.find(c => c.slug === slug);
+  $("hiscore-list").innerHTML = rows.length ? rows.map((r, i) => {
+    const c = portrait(r.character);
+    return `<li class="${["gold", "silver", "bronze"][i] || ""}" style="animation-delay:${0.15 + i * 0.12}s">
+      <span class="rank">${ORDINALS[i]}</span>
+      ${c ? `<img class="face" src="${c.portrait}" alt="">` : `<span class="face"></span>`}
+      <span class="who">${esc(r.name || r.username)}</span>
+      <span class="char">${esc(c?.name || r.character)}${r.best_combo >= 2 ? ` <b class="combo">${r.best_combo} HIT</b>` : ""}</span>
+      <span class="pts">${String(r.score).padStart(7, "0")}</span>
+    </li>`;
+  }).join("") : `<li class="none">NO SCORES YET &middot; BE THE FIRST!</li>`;
+  timer = setTimeout(finish, (rows.length ? HISCORE_SECONDS : 3) * 1000);
+}
+
 runSplash();
-initMenu().catch(e => { $("player-grid").innerHTML = `<p class="empty">Failed to load: ${esc(e.message)}</p>`; });
+app.ready = initMenu();
+app.ready.catch(e => { $("player-grid").innerHTML = `<p class="empty">Failed to load: ${esc(e.message)}</p>`; });
