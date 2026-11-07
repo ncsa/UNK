@@ -125,5 +125,13 @@
     }
   ],
   "warnings": [],
-  "stature": 1.22
+  "stature": 1.22,
+  "frame_scale": {
+    "crouch_0": 0.78,
+    "crouch_block_0": 0.78,
+    "crouch_punch_0": 0.73,
+    "crouch_punch_1": 0.86,
+    "crouch_kick_0": 0.58,
+    "crouch_kick_1": 0.58
+  }
 }
