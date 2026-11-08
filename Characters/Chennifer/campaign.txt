@@ -1,0 +1,20 @@
+# Campaign for Chennifer: a side-scrolling street level that ends at Chennifer's arena, where Chennifer
+# waits as the boss. Fill this in, then run add_campaign.py again: only what changed is redrawn.
+# Lines starting with # are ignored. Write as much or as little as you like; anything left out is
+# made up to fit Chennifer.
+
+Story:
+# Why is Chennifer the boss? What are they up to, and why does the player have to stop them?
+# e.g. "Chennifer has locked down the building and won't let anyone out until ..."
+Chennifer has decided cats are the supreme beings due to their excessive cuteness and aims to replace all humans on campus with cats.
+
+Setting:
+# What the player walks past on the way to the arena, and anything lying around that fits the
+# story, e.g. "the main quad, then a row of old labs; shredders and stacks of file boxes".
+
+Enemies:
+# Who gets in the player's way, one per line starting with "- ": what they look like and how they
+# fight. Add "(x3)" for how many show up. e.g.
+# - Clipboard Intern: a nervous intern in a lanyard who swats with a clipboard and blocks a lot (x4)
+
+-Mini boss: Yanello

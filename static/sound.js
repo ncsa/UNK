@@ -48,12 +48,22 @@ const sound = {
     try { localStorage.setItem("unk.sfxMuted", this.muted ? "1" : "0"); } catch {}
   },
 
+  // Where a sound at world x goes: panned left or right of the screen's centre.
+  panTo(x, dest) {
+    if (x === null || this.centerX === null || !this.ctx.createStereoPanner) return dest;
+    const pan = this.ctx.createStereoPanner();
+    pan.pan.value = Math.max(-1, Math.min(1, (x - this.centerX) / 160)) * 0.6;
+    pan.connect(dest);
+    return pan;
+  },
+
   has(name) { return Boolean(this.files[name]?.length); },
 
   // play("hit_heavy", { x: fighter.x }) pans by world position.
   async play(name, { x = null } = {}) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state !== "running" || this.muted || !this.has(name)) return;
+    if (!ctx || ctx.state !== "running" || this.muted) return;
+    if (!this.has(name)) { SYNTH[name]?.(ctx, this.panTo(x, this.out)); return; }
     const urls = this.files[name], url = urls[Math.floor(Math.random() * urls.length)];
     this.buffers[url] ||= fetch(url).then(r => r.arrayBuffer()).then(b => ctx.decodeAudioData(b)).catch(() => null);
     const buffer = await this.buffers[url];
@@ -63,14 +73,7 @@ const sound = {
     }
     const src = ctx.createBufferSource();
     src.buffer = buffer;
-    let dest = this.out;
-    if (x !== null && this.centerX !== null && ctx.createStereoPanner) {
-      const pan = ctx.createStereoPanner();
-      pan.pan.value = Math.max(-1, Math.min(1, (x - this.centerX) / 160)) * 0.6;
-      pan.connect(dest);
-      dest = pan;
-    }
-    src.connect(dest);
+    src.connect(this.panTo(x, this.out));
     src.start();
     // Duck the music under the announcer so the call is clear.
     if (name.startsWith("vo_") && typeof music !== "undefined") {
@@ -78,6 +81,21 @@ const sound = {
       clearTimeout(this.unduck);
       this.unduck = setTimeout(() => music.duck(false), buffer.duration * 1000);
     }
+  },
+};
+
+// Effects made on the spot when there's no file for them.
+const SYNTH = {
+  laser(ctx, dest) {  // a short falling "pew"
+    const t = ctx.currentTime, osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.setValueAtTime(1500, t);
+    osc.frequency.exponentialRampToValueAtTime(240, t + 0.16);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    osc.connect(g).connect(dest);
+    osc.start(t); osc.stop(t + 0.2);
   },
 };
 

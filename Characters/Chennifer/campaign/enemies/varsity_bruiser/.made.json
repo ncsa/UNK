@@ -1,0 +1,21 @@
+{
+ "attack1_0": "d8647321ba61",
+ "attack1_1": "6291bb13425a",
+ "attack2_0": "3659611bdae6",
+ "attack2_1": "4b3fdbff641f",
+ "hit_0": "47415551abec",
+ "idle_0": "8c2bf79848ee",
+ "idle_1": "be7a26244d04",
+ "ko_0": "043ec56f4032",
+ "ref": "ebba16ae78fc",
+ "walk_0": "strip",
+ "walk_1": "strip",
+ "walk_2": "strip",
+ "walk_3": "strip",
+ "walk_4": "strip",
+ "walk_5": "strip",
+ "walk_6": "strip",
+ "walk_7": "strip",
+ "walk_strip": "84e8f843f2d8",
+ "walk_strip_drawn": "84e8f843f2d8"
+}

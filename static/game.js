@@ -1451,12 +1451,14 @@ class Match {
   // rounds: rounds to win the match; 1 for a campaign's mini boss (a draw is fought again).
   // From a campaign street (static/brawl.js), the first round can also start where the two walked
   // to (starts: [player x, opponent x] on the stage) and with the player's health from the street.
+  // stage: draws the ground instead of arenaImg, {back(ctx, camX), front(ctx, camX)} (front: in
+  // front of the fighters); a campaign's mini boss is fought on the street itself this way.
   constructor({ player, opponent, arena, arenaImg, onEnd, difficulty = "easy", rounds = ROUNDS_TO_WIN,
-                starts = null, health = null }) {
+                starts = null, health = null, stage = null }) {
     this.canvas = $("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
-    this.arena = arena; this.arenaImg = arenaImg;
+    this.arena = arena; this.arenaImg = arenaImg; this.stage = stage;
     // The arena image's edges are the stage's hard edges. The server builds arenas at least
     // screen-wide; an older, narrower one is stretched to fill the screen rather than leaving
     // black space fighters could walk into.
@@ -2289,12 +2291,14 @@ class Match {
 
     ctx.save();
     ctx.translate(0, shakeY);
-    ctx.drawImage(this.arenaImg, -camX, 0, this.arenaW, H);
+    if (this.stage) this.stage.back(ctx, camX);
+    else ctx.drawImage(this.arenaImg, -camX, 0, this.arenaW, H);
     for (const a of this.abducts) if (a.phase === "plane") this.drawVehicle(ctx, a, a.plane, 34, camX);  // behind the faller
     this.drawSlideshows(ctx);
     this.drawAudits(ctx, camX, "back");
     this.drawOrbitals(ctx, camX, "ground");
     for (const f of [p2, p1]) f.draw(ctx, camX);
+    this.stage?.front(ctx, camX);
     this.drawAudits(ctx, camX, "front");
     this.drawOrbitals(ctx, camX, "beam");
     this.drawRains(ctx, camX);

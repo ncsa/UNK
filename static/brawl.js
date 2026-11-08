@@ -64,7 +64,10 @@ const STREET_LEVELS = {
   medium: { attackers: 2, think: 48, windup: 1.0,  damage: 1.0,  block: 0.4 },
   hard:   { attackers: 3, think: 30, windup: 0.8,  damage: 1.25, block: 0.55 },
 };
-const RANGED_MOVE = /throw|toss|fling|spray|fire|shoot|spit|hurl|launch/i;
+const RANGED_MOVE = /throw|toss|fling|spray|fire|shoot|spit|hurl|launch|laser|zap|beam|blast/i;
+const LASER_MOVE = /laser|zap|beam|\bray\b|bolt|blast/i;  // a ranged move that shoots a red beam, not a thrown thing
+const FLYING = /hover|\bfl(y|ies|ying)\b|float|airborne|drone|propeller|rotor|levitat/i;  // kept off the ground
+const HOVER = 22;  // how high a flying enemy hovers (px), bobbing a little
 const CHARGE_MOVE = /charge|rush|\bram|run over|dash|tackle/i;
 
 // An enemy kind's numbers come from its size: bigger is tougher, slower and hits harder.
@@ -72,10 +75,12 @@ function enemyKind(info, sheet, img) {
   const t = Math.max(0.8, sheet.height / 112);
   const moves = Object.entries(sheet.moves || {}).filter(([a]) => a.startsWith("attack")).map(([anim, name]) => {
     const text = info.moves.find(m => m.startsWith(name)) || name;
-    return { anim, name, kind: RANGED_MOVE.test(text) ? "ranged" : CHARGE_MOVE.test(text) ? "charge" : "melee" };
+    const kind = RANGED_MOVE.test(text) ? "ranged" : CHARGE_MOVE.test(text) ? "charge" : "melee";
+    return { anim, name, kind, laser: kind === "ranged" && LASER_MOVE.test(text) };
   });
+  const flies = FLYING.test([info.name, info.look, info.fighting_style].join(" "));
   return { name: info.name, sheet, img, t, moves, hp: Math.round(14 + 22 * t * t), damage: 3 + 4 * t,
-           speed: 1.25 / Math.sqrt(t), heavy: t > 1.2, canBlock: Boolean(sheet.animations.block) };
+           speed: 1.25 / Math.sqrt(t), heavy: t > 1.2, canBlock: Boolean(sheet.animations.block), flies };
 }
 
 function frameOf(anim, t, hold) {
@@ -109,10 +114,12 @@ class Brawler {
   get down() { return ["fall", "down", "getup", "dead"].includes(this.state); }
   box(b) {
     const [l, t, w, h] = b;
-    return { x: this.facing > 0 ? this.x + l : this.x - l - w, y: this.z - this.h + t, w, h };
+    return { x: this.facing > 0 ? this.x + l : this.x - l - w, y: this.z - this.h - (this.lift || 0) + t, w, h };
   }
   hurtBox() { return this.box(this.frame().hurt); }
-  fallFrom(dir, vx = 2.4) { this.setState("fall"); this.vx = dir * vx; this.vh = 3.2; this.h = Math.max(this.h, 1); }
+  fallFrom(dir, vx = 2.4) {  // a hovering enemy falls from its hover height
+    this.setState("fall"); this.vx = dir * vx; this.vh = 3.2; this.h = Math.max(this.h + (this.lift || 0), 1); this.lift = 0;
+  }
   // knocked-down physics; returns true when it has landed and stayed down long enough
   updateDown(street) {
     if (this.state === "fall") {
@@ -350,7 +357,30 @@ class Street {
       return { img, starts: [this.hero.x + off, w.foe.x + off], health: this.hero.hp };
     }
     const img = this.snapshot(w.camX + W / 2);
-    return { img, starts: [this.hero.x - this.snapX, w.foe.x - this.snapX], health: this.hero.hp };
+    // the fight draws the street itself (scrolling as the street does, front props in front), so the
+    // backdrop doesn't move when it starts or ends; img only sets how far the fight can roam
+    const stage = { back: (ctx, camX) => this.drawStage(ctx, this.snapX + camX, "back"),
+                    front: (ctx, camX) => this.drawStage(ctx, this.snapX + camX, "front") };
+    return { img, stage, starts: [this.hero.x - this.snapX, w.foe.x - this.snapX], health: this.hero.hp };
+  }
+
+  // The backdrop (scrolling slower than the ground) and the pavement, for a camera at cx.
+  drawGround(ctx, cx) {
+    const L = this.level;
+    ctx.drawImage(this.imgs[L.back.image], -Math.round(cx * L.back.parallax), 0);
+    const fl = this.imgs[L.floor.image];
+    for (let x = -(cx % fl.width); x < W; x += fl.width) ctx.drawImage(fl, Math.round(x), L.floor_y);
+  }
+
+  // The street as the mini boss's match sees it: "back" is the ground, the props behind the
+  // fighters and any hearts lying there; "front" the props in front of them.
+  drawStage(ctx, cx, layer) {
+    if (layer === "back") this.drawGround(ctx, cx);
+    for (const p of this.props) if (p.layer === layer && !p.broken) {
+      const im = this.imgs[p.image];
+      ctx.drawImage(im, Math.round(p.x - cx - im.width / 2), p.y - im.height);
+    }
+    if (layer === "back") this.drawPickups(ctx, cx);
   }
 
   // The arena on its way in: from where the backdrop shows it (view) to filling the screen with its
@@ -1139,6 +1169,10 @@ class Street {
     const h = this.hero, k = e.kind;
     e.t++;
     if (e.invuln) e.invuln--;
+    if (k.flies) {  // rise to hover height (again after getting up), bobbing; sink a little while dazed
+      const want = e.down ? 0 : (e.state === "dizzy" ? HOVER * 0.4 : HOVER) + Math.sin((this.clock + e.wander) / 14) * 2;
+      e.lift = e.down ? 0 : (e.lift || 0) + (want - (e.lift || 0)) * 0.12;
+    }
     if (e.down) { e.updateDown(this); if (e.state === "idle") e.setState("approach"); return; }
     if (e.state === "dizzy") { if (e.t >= e.stunFor) { e.taped = false; e.setState("approach"); } return; }
     const toward = h.x >= e.x ? 1 : -1;
@@ -1176,11 +1210,14 @@ class Street {
       case "windup":
         if (e.t >= e.windup) {
           e.setState("strike");
-          sfx(e.move.kind === "ranged" ? "throw" : "punch_whoosh", { x: e.x });
+          sfx(e.move.laser ? "laser" : e.move.kind === "ranged" ? "throw" : "punch_whoosh", { x: e.x });
           if (e.move.kind === "ranged") {
-            const f = e.frame();
-            this.shots.push({ x: e.x + e.facing * 20, z: e.z, h: Math.min(70, f.ay * 0.6), vx: e.facing * 3.4,
-                              owner: e, t: 0, spin: Math.random() * 6 });
+            const f = e.frame(), lift = e.lift || 0;
+            this.shots.push(e.move.laser  // a laser leaves from the eye, fast and straight
+              ? { laser: true, x: e.x + e.facing * f.w * 0.4, z: e.z, h: lift + f.ay * 0.55, vx: e.facing * 7,
+                  owner: e, t: 0, x0: e.x + e.facing * f.w * 0.4 }
+              : { x: e.x + e.facing * 20, z: e.z, h: Math.min(70, lift + f.ay * 0.6), vx: e.facing * 3.4,
+                  owner: e, t: 0, spin: Math.random() * 6 });
           }
         }
         break;
@@ -1239,9 +1276,7 @@ class Street {
     const shakeY = this.shake ? (this.shake % 2 ? 2 : -2) : 0;
     ctx.save();
     ctx.translate(0, shakeY);
-    ctx.drawImage(this.imgs[L.back.image], -Math.round(cx * L.back.parallax), 0);
-    const fl = this.imgs[L.floor.image];
-    for (let x = -(cx % fl.width); x < W; x += fl.width) ctx.drawImage(fl, Math.round(x), L.floor_y);
+    this.drawGround(ctx, cx);
     const prop = p => {
       if (p.broken) return;
       const im = this.imgs[p.image], jig = p.shake ? (p.shake % 4 < 2 ? 2 : -2) : 0;
@@ -1268,7 +1303,8 @@ class Street {
     const actors = [...this.enemies, ...boss, h];
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     for (const a of actors) {
-      ctx.beginPath(); ctx.ellipse(Math.round(a.x - cx), Math.round(a.z) + 1, a.down ? 28 : 18, 4, 0, 0, Math.PI * 2); ctx.fill();
+      const rx = a.down ? 28 : a.lift > 4 ? 13 : 18;  // smaller under something hovering
+      ctx.beginPath(); ctx.ellipse(Math.round(a.x - cx), Math.round(a.z) + 1, rx, a.lift > 4 ? 3 : 4, 0, 0, Math.PI * 2); ctx.fill();
     }
     this.drawPickups(ctx, cx);
     for (const a of actors.sort((p, q) => p.z - q.z)) {
@@ -1280,7 +1316,7 @@ class Street {
         continue;
       }
       const img = a === h ? h.char.img : a.kind.img;
-      drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h, a.facing);
+      drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h - (a.lift || 0), a.facing);
     }
     for (const s of this.shots) this.drawShot(ctx, s, cx);
     this.drawFx(ctx, cx);
@@ -1306,9 +1342,25 @@ class Street {
     this.drawHUD(ctx);
   }
 
-  // A thrown sheaf of papers, tumbling.
+  // A thrown sheaf of papers, tumbling; or a laser: a red beam with a hot core and a flash where it left.
   drawShot(ctx, s, cx) {
     const x = Math.round(s.x - cx), y = Math.round(s.z - s.h);
+    if (s.laser) {
+      const dir = Math.sign(s.vx), len = Math.min(34, Math.abs(s.x - s.x0) + 6), tail = x - dir * len;
+      const l = Math.min(x, tail), w = Math.abs(x - tail);
+      ctx.save();
+      ctx.fillStyle = "rgba(255,0,20,0.4)"; ctx.fillRect(l, y - 3, w, 7);    // glow
+      ctx.fillStyle = "#e0001a"; ctx.fillRect(l, y - 1, w, 3);               // beam
+      ctx.fillStyle = "#ff5a5a"; ctx.fillRect(l + (dir > 0 ? 4 : 0), y, w - 4, 1);  // hot core
+      ctx.fillStyle = "#ffe0e0"; ctx.fillRect(x - 1, y - 1, 2, 3);           // bright tip
+      if (s.t < 5) {  // muzzle flash
+        const fx = Math.round(s.x0 - cx), r = 5 - s.t;
+        ctx.fillStyle = "rgba(255,0,20,0.6)"; ctx.fillRect(fx - r, y - r, r * 2, r * 2);
+        ctx.fillStyle = "#fff"; ctx.fillRect(fx - 1, y - 1, 3, 3);
+      }
+      ctx.restore();
+      return;
+    }
     ctx.fillStyle = "rgba(0,0,0,0.3)";
     ctx.fillRect(x - 6, Math.round(s.z), 12, 2);
     for (let i = 0; i < 3; i++) {
@@ -1365,12 +1417,12 @@ class Street {
     const S = this.level.story || {};
     ctx.font = `8px ${FONT}`; ctx.textAlign = "left";
     if (this.phase === "intro") {
-      this.panel(ctx, [...(S.title ? [S.title.toUpperCase(), ""] : []), ...wrapText(ctx, S.intro || "", W - 52), "",
-                       "ARROWS/WASD MOVE  J PUNCH  K KICK  SPACE JUMP", "LEFT SHIFT CROUCH  L OR HOLD BACK BLOCK",
+      this.panel(ctx, [...(S.title ? [S.title.toUpperCase(), ""] : []), S.intro || "", "",
+                       "MOVE ARROWS/WASD  JUMP SPACE  BLOCK L", "PUNCH J  KICK K  CROUCH SHIFT",
                        "UP+J UPPERCUT  SPECIALS AS IN A MATCH", "", "PRESS J TO START"], 44);
     }
     if (this.phase === "boss") {
-      this.panel(ctx, [`${this.boss.name.toUpperCase()}:`, ...wrapText(ctx, `"${S.boss_taunt || "You made it this far?"}"`, W - 52)], 40, "#ffd0d0");
+      this.panel(ctx, [`${this.boss.name.toUpperCase()}:`, `"${S.boss_taunt || "You made it this far?"}"`], 40, "#ffd0d0");
     }
     if (this.phase === "mini") {
       const m = this.mini, f = frameOf(m.char.sheetData.animations.idle, this.clock);
@@ -1395,12 +1447,16 @@ class Street {
     }
   }
 
+  // A box of text across the screen, top at y (raised if it would run off the bottom). Every line is
+  // wrapped to fit inside it; the first (a heading) is yellow.
   panel(ctx, lines, y, color = "#fff") {
-    const hgt = lines.length * 11 + 12;
+    ctx.font = `8px ${FONT}`; ctx.textAlign = "left";
+    const rows = lines.flatMap((l, i) => (ctx.measureText(l).width <= W - 54 ? [l] : wrapText(ctx, l, W - 54)).map(r => [r, i === 0]));
+    const hgt = rows.length * 11 + 12;
+    y = Math.max(2, Math.min(y, H - hgt - 2));
     ctx.fillStyle = "rgba(0,0,0,0.78)"; ctx.fillRect(16, y, W - 32, hgt);
     ctx.strokeStyle = "#ffd23f"; ctx.lineWidth = 1; ctx.strokeRect(16.5, y + 0.5, W - 33, hgt - 1);
-    ctx.textAlign = "left";
-    lines.forEach((l, i) => outlinedText(ctx, l, 26, y + 16 + i * 11, i === 0 ? "#ffd23f" : color, 1));
+    rows.forEach(([l, head], i) => outlinedText(ctx, l, 26, y + 16 + i * 11, head ? "#ffd23f" : color, 1));
   }
 
   // Points so far, as server.py will count them (before the multipliers). Combos on the street are
@@ -1449,7 +1505,7 @@ async function startCampaign(campaign) {
       onMini: fight => {
         // Fought right there on the street (the same backdrop), from where the two walked to and with
         // the hero's health, to the mini boss's own music.
-        app.match = new Match({ player: pc, opponent: mc, arena: miniArena, arenaImg: fight.img, starts: fight.starts,
+        app.match = new Match({ player: pc, opponent: mc, arena: miniArena, arenaImg: fight.img, stage: fight.stage, starts: fight.starts,
                                 health: fight.health, difficulty: app.difficulty, rounds: 1, onEnd: m => {
           if (m.quit) { app.match = null; showMenu(); return; }
           if (m.won) { const fight = app.match; app.match = st; st.resume(fight); return; }

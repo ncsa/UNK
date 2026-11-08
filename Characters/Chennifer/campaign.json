@@ -1,0 +1,94 @@
+{
+  "horizon": 0.85,
+  "floor_y": 150,
+  "back_parallax": 0.6,
+  "title": "Siebel Chaos",
+  "boss_motive": "Chennifer believes cats are supreme beings due to their excessive cuteness and aims to replace all humans on campus with felines.",
+  "intro": "Chaos has overtaken the university campus! Chennifer is running wild, trying to convert the entire student body into cats. Fight your way to the Siebel building to stop the zoomies once and for all!",
+  "boss_taunt": "BUT WHYYYY aren't you a cat yet?!",
+  "outro": "Chennifer finally calmed down and got distracted by a passing butterfly. The campus is safe from feline domination for now.",
+  "screens": 6,
+  "scenery": "Extending away from the glass-faced modern Siebel building are brick walkways lined with lush green bushes, leafy oak trees, traditional red-brick academic halls with tiled roofs, low concrete plazas, and distant metal bike racks against a bright blue sky.",
+  "props": [
+    {
+      "name": "lamppost",
+      "description": "A tall black steel courtyard light fixture with a round glass globe.",
+      "size": 1.45,
+      "where": "back"
+    },
+    {
+      "name": "bench",
+      "description": "A dark wooden park bench with cast-iron legs.",
+      "size": 0.42,
+      "where": "back"
+    },
+    {
+      "name": "trashcan",
+      "description": "A cylindrical green metal waste bin with a open top.",
+      "size": 0.55,
+      "where": "back"
+    },
+    {
+      "name": "catbed",
+      "description": "A soft plush pink feline cushion resting near the curb.",
+      "size": 0.25,
+      "where": "front"
+    },
+    {
+      "name": "planter",
+      "description": "A heavy square concrete box filled with yellow flowers.",
+      "size": 0.5,
+      "where": "back"
+    }
+  ],
+  "join_cover": "one tall full-grown leafy oak tree, trunk and roots at the bottom, a broad round crown of green leaves at the top, seen from the side",
+  "enemies": [
+    {
+      "name": "Cat Enthusiast",
+      "look": "Slender build wearing a bright orange hoodie with cat ears, blue jeans, carrying a foam cat paw.",
+      "personality": "Over-enthusiastic and distracted",
+      "fighting_style": "Swings wildly with soft cat paws while lunging forward.",
+      "moves": [
+        "Paw Swipe (slaps rapidly with foam paw)",
+        "Kitty Lunge (leaps forward into a tackle)"
+      ],
+      "count": 6,
+      "first_screen": 1,
+      "body": "humanoid",
+      "height": 1.0
+    },
+    {
+      "name": "Hypno-Cat Drone",
+      "look": "A small hovering mechanical feline head made of silver metal with glowing pink eyes.",
+      "personality": "Coldly purring",
+      "fighting_style": "Hovers just out of reach and dives at targets.",
+      "moves": [
+        "Meow Zap (fires a pink energy ring)",
+        "Swoop Attack (dives straight into the player)"
+      ],
+      "count": 4,
+      "first_screen": 2,
+      "body": "other",
+      "height": 0.4
+    },
+    {
+      "name": "Varsity Bruiser",
+      "look": "Broad-shouldered mini-boss in a yellow varsity jacket, grey sweatpants, and red sneakers, carrying rolled-up blueprints.",
+      "personality": "Strict and stubborn",
+      "fighting_style": "Heavy brawler tactics using ground slams and blueprints.",
+      "moves": [
+        "Blueprint Whack (strikes downwards forcefully)",
+        "Campus Charge (runs forward for a heavy shoulder tackle)",
+        "Ground Stomp (creates a small shockwave)"
+      ],
+      "count": 2,
+      "first_screen": 4,
+      "body": "humanoid",
+      "height": 1.25
+    }
+  ],
+  "source": {
+    "text_hash": "4900d6db7a8b",
+    "parsed_text": "Story:\nChennifer has decided cats are the supreme beings due to their excessive cuteness and aims to replace all humans on campus with cats.\n\nSetting:\n\nEnemies:"
+  }
+}

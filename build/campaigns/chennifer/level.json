@@ -1,0 +1,214 @@
+{
+ "character": "chennifer",
+ "width": 2304,
+ "height": 224,
+ "floor_y": 150,
+ "story": {
+  "title": "Siebel Chaos",
+  "boss_motive": "Chennifer believes cats are supreme beings due to their excessive cuteness and aims to replace all humans on campus with felines.",
+  "intro": "Chaos has overtaken the university campus! Chennifer is running wild, trying to convert the entire student body into cats. Fight your way to the Siebel building to stop the zoomies once and for all!",
+  "boss_taunt": "BUT WHYYYY aren't you a cat yet?!",
+  "outro": "Chennifer finally calmed down and got distracted by a passing butterfly. The campus is safe from feline domination for now."
+ },
+ "back": {
+  "image": "back.png",
+  "parallax": 0.6
+ },
+ "floor": {
+  "image": "floor.png"
+ },
+ "props": [
+  {
+   "image": "props/bench.png",
+   "x": 196,
+   "y": 153,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 319,
+   "y": 154,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 1641,
+   "y": 154,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 720,
+   "y": 155,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 1395,
+   "y": 155,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/bench.png",
+   "x": 1437,
+   "y": 155,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 1083,
+   "y": 156,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 465,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 887,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/planter.png",
+   "x": 935,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 1531,
+   "y": 157,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/catbed.png",
+   "x": 1131,
+   "y": 233,
+   "layer": "front",
+   "breakable": true
+  },
+  {
+   "image": "props/catbed.png",
+   "x": 368,
+   "y": 234,
+   "layer": "front",
+   "breakable": true
+  },
+  {
+   "image": "props/catbed.png",
+   "x": 1762,
+   "y": 234,
+   "layer": "front",
+   "breakable": true
+  }
+ ],
+ "enemies": [
+  {
+   "name": "Cat Enthusiast",
+   "look": "Slender build wearing a bright orange hoodie with cat ears, blue jeans, carrying a foam cat paw.",
+   "personality": "Over-enthusiastic and distracted",
+   "fighting_style": "Swings wildly with soft cat paws while lunging forward.",
+   "moves": [
+    "Paw Swipe (slaps rapidly with foam paw)",
+    "Kitty Lunge (leaps forward into a tackle)"
+   ],
+   "count": 6,
+   "sheet": "enemies/cat_enthusiast/sheet.json"
+  },
+  {
+   "name": "Hypno-Cat Drone",
+   "look": "A small hovering mechanical feline head made of silver metal with glowing pink eyes.",
+   "personality": "Coldly purring",
+   "fighting_style": "Hovers just out of reach and dives at targets.",
+   "moves": [
+    "Meow Zap (fires a pink energy ring)",
+    "Swoop Attack (dives straight into the player)"
+   ],
+   "count": 4,
+   "sheet": "enemies/hypno_cat_drone/sheet.json"
+  },
+  {
+   "name": "Varsity Bruiser",
+   "look": "Broad-shouldered mini-boss in a yellow varsity jacket, grey sweatpants, and red sneakers, carrying rolled-up blueprints.",
+   "personality": "Strict and stubborn",
+   "fighting_style": "Heavy brawler tactics using ground slams and blueprints.",
+   "moves": [
+    "Blueprint Whack (strikes downwards forcefully)",
+    "Campus Charge (runs forward for a heavy shoulder tackle)",
+    "Ground Stomp (creates a small shockwave)"
+   ],
+   "count": 2,
+   "sheet": "enemies/varsity_bruiser/sheet.json"
+  }
+ ],
+ "waves": [
+  {
+   "x": 614,
+   "screen": 2,
+   "enemies": [
+    "Cat Enthusiast",
+    "Cat Enthusiast"
+   ]
+  },
+  {
+   "x": 998,
+   "screen": 3,
+   "enemies": [
+    "Cat Enthusiast",
+    "Cat Enthusiast",
+    "Cat Enthusiast"
+   ]
+  },
+  {
+   "x": 1382,
+   "screen": 4,
+   "enemies": [
+    "Cat Enthusiast",
+    "Hypno-Cat Drone",
+    "Hypno-Cat Drone"
+   ]
+  },
+  {
+   "x": 1766,
+   "screen": 5,
+   "enemies": [
+    "Hypno-Cat Drone",
+    "Hypno-Cat Drone",
+    "Varsity Bruiser",
+    "Varsity Bruiser"
+   ]
+  }
+ ],
+ "boss": {
+  "x": 1920,
+  "arena": "chennifer_home",
+  "view": {
+   "x": 68.18,
+   "y": 0.0,
+   "scale": 0.7876,
+   "width": 401
+  }
+ },
+ "mini_boss": {
+  "character": "yanello",
+  "name": "Yanello",
+  "after_wave": 2,
+  "x": 1230,
+  "arena": "yanello_home"
+ }
+}

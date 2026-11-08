@@ -1,0 +1,93 @@
+{
+  "horizon": 0.85,
+  "floor_y": 150,
+  "back_parallax": 0.6,
+  "title": "Campus Cyber Crisis",
+  "boss_motive": "Kengore, the cybernetic evolution of Tonian, believes he is the pinnacle of human perfection. He seeks to conquer the campus with his automated army and replace the student body with code.",
+  "intro": "Kengore's mechanical forces have taken over the university quad! Drones and droids enforce his perfectionist regime across the grounds. Fight your way to the Beckman building to unplug his supreme ego!",
+  "boss_taunt": "Flesh is obsolete! Bow down before the pinnacle of evolution!",
+  "outro": "Kengore's cybernetic systems crash as his orbital targeter powers down. The campus is saved from total automated takeover!",
+  "screens": 6,
+  "scenery": "The path begins at the grand Beckman building with its red brick facade, glass curtain tower, green roof trim, and obelisk statue, then moves past brick university halls, manicured lawns framed by globe streetlamps, bare winter trees, paved plazas, and lower campus academic buildings under a twilight pixelated sky.",
+  "props": [
+    {
+      "name": "lamp",
+      "description": "A dark metal classic university lamppost with a glowing white globe globe at the top.",
+      "size": 1.4,
+      "where": "back"
+    },
+    {
+      "name": "bench",
+      "description": "A classic wooden campus bench with dark cast-iron armrests and legs.",
+      "size": 0.45,
+      "where": "back"
+    },
+    {
+      "name": "trashcan",
+      "description": "A green cylindrical metal mesh campus recycling bin.",
+      "size": 0.5,
+      "where": "front"
+    },
+    {
+      "name": "terminal",
+      "description": "A sleek silver cybernetic kiosk with glowing cyan lights, installed by Kengore's forces.",
+      "size": 0.85,
+      "where": "back"
+    },
+    {
+      "name": "planter",
+      "description": "A low square concrete planter filled with decorative green bushes.",
+      "size": 0.35,
+      "where": "back"
+    }
+  ],
+  "join_cover": "one tall full-grown leafy oak tree, trunk and roots at the bottom, a broad round crown of green leaves at the top, seen from the side",
+  "enemies": [
+    {
+      "name": "Patrol Drone",
+      "look": "A hovering spherical chrome drone with a single red optical eye and dual stubby propellers.",
+      "personality": "Beeping and relentless",
+      "fighting_style": "Hovers just out of reach and dives at the player while firing tiny laser bursts.",
+      "moves": [
+        "Zap Beam (Fires a quick low-damage laser bolt)",
+        "Dive Bomb (Dives headfirst into the player)"
+      ],
+      "count": 8,
+      "first_screen": 1,
+      "body": "other",
+      "height": 0.4
+    },
+    {
+      "name": "Campus Droid",
+      "look": "A bipedal robotic guard made of white polished plastic panels with blue LED visor strips.",
+      "personality": "Rigid and methodical",
+      "fighting_style": "Marches forward delivering precise robotic jabs and defensive blocks.",
+      "moves": [
+        "Piston Punch (A heavy forward punch)",
+        "Shock Palm (Stuns the player with an electrified hand strike)"
+      ],
+      "count": 6,
+      "first_screen": 2,
+      "body": "humanoid",
+      "height": 1.1
+    },
+    {
+      "name": "Cyborg Enforcer",
+      "look": "A heavily armored cyborg with exposed metallic shoulders, red mechanical eyes, and a spiked gauntlet.",
+      "personality": "Cold and unstoppable, Kengore's elite muscle",
+      "fighting_style": "Slow, heavy-hitting brawler who walks through punches and crushes with his gauntlet.",
+      "moves": [
+        "Iron Jab: a heavy straight punch with his free fist",
+        "Gauntlet Smash: raises his arm high and smashes it down"
+      ],
+      "count": 2,
+      "first_screen": 4,
+      "body": "humanoid",
+      "height": 1.35
+    }
+  ],
+  "source": {
+    "text_hash": "0a903f3c8991",
+    "parsed_text": "Kengore is the cybernetic version of Tonian.  He considers himself the epitome of human evolution and is trying to conquer campus with an army droids and drones.\n\nStory:\n\nSetting:\n\nEnemies:"
+  }
+}

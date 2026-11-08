@@ -35,7 +35,7 @@ add_character.py uses for fighters; built into a sprite sheet in the fighters' f
 kind. --only enemies (or enemy_<slug>) redraws just those.
 
 Mini boss: a line "Mini boss: <character>" in the boss's own profile (Characters/<Name>/<Name>.txt,
-e.g. "Mini boss: TheKoop") puts that fighter halfway along the street. Reaching them is one round of
+e.g. "Mini boss: TheKoop") or in campaign.txt puts that fighter halfway along the street. Reaching them is one round of
 a regular match, fought there on the street to their music (their home arena's); then the street goes on. Picked up by the
 build stage, so --stage build is enough after adding or changing it.
 
@@ -220,7 +220,9 @@ def key(*parts):
 # --------------------------------------------------------------------------- parse
 
 def text_of(path):
-    return "\n".join(l for l in path.read_text().splitlines() if not l.lstrip().startswith("#")).strip()
+    """campaign.txt without its # notes or a "Mini boss:" line (that's a real fighter, not an enemy
+    for the parser to invent)."""
+    return text_of_str(ac.MINI_BOSS_LINE.sub("", path.read_text()))
 
 
 def stage_parse(folder, cfg_path, reparse=False):
@@ -778,7 +780,8 @@ def mini_boss(folder, slug, waves, level_w):
     """The mini boss named in the boss's profile ("Mini boss: <character>"), placed halfway along
     the street between two waves, or None. after_wave: how many waves must be beaten first."""
     txt, _ = ac.find_sources(folder)
-    name = ac.mini_boss_of(txt)
+    # the boss's profile, or campaign.txt
+    name = ac.mini_boss_of(txt) or ac.mini_boss_of(folder / "campaign.txt")
     if not name:
         return None
     key_ = lambda s: "".join(c for c in s.lower() if c.isalnum())

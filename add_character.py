@@ -436,7 +436,7 @@ def notes_removed(text):
 # "Mini boss: <character>" in a profile is for add_campaign.py (who the player meets halfway along
 # this character's campaign street). It isn't part of the fighter, so the parser never sees it and
 # adding or changing it doesn't re-parse the profile.
-MINI_BOSS_LINE = re.compile(r"(?im)^[ \t]*mini[ -]?boss[ \t]*:[^\n]*(?:\n|$)")
+MINI_BOSS_LINE = re.compile(r"(?im)^[ \t]*(?:[-*•][ \t]*)?mini[ -]?boss[ \t]*:[^\n]*(?:\n|$)")  # "- Mini boss:" too
 
 
 def mini_boss_of(txt):
@@ -1287,6 +1287,24 @@ def slice_grid(img, rows, per_row):
     return out
 
 
+def figure_rows(img):
+    """How many rows of figures a generated sheet holds: bands of drawing split by empty magenta."""
+    a = np.asarray(drop_specks(remove_background(img), min_frac=0.004))[:, :, 3] > 0
+    filled = a.any(axis=1)
+    ys = np.nonzero(filled)[0]
+    if not len(ys):
+        return 0
+    span, bands, start = ys[-1] - ys[0] + 1, 0, None
+    for y in range(ys[0], ys[-1] + 2):
+        on = y <= ys[-1] and filled[y]
+        if on and start is None:
+            start = y
+        elif not on and start is not None:
+            bands += (y - start) >= span * 0.15  # a real row of figures, not a stray bit
+            start = None
+    return bands
+
+
 def stage_walk_strip(frames_dir, ref, made, force, char, prompt=WALK_STRIP_PROMPT, poses=None, rows=None,
                      check=True):
     """All of the walk's frames from one generated strip (see WALK_STRIP_PROMPT); cached like frames.
@@ -1312,7 +1330,13 @@ def stage_walk_strip(frames_dir, ref, made, force, char, prompt=WALK_STRIP_PROMP
             strip.save(saved)
             made["walk_strip_drawn"] = k
             write_made(frames_dir, made)
-        parts = slice_grid(strip, rows, len(stems) // rows)
+        found = figure_rows(strip)
+        if found > rows:  # drew more rows than asked (e.g. two rows of 4 for a 4-frame strip): cut
+            log(f"    drew {found} rows instead of {rows}; using the first {len(stems)} figures")  # by what's there
+            parts = slice_grid(strip, found, len(stems) // rows)
+            parts = parts and parts[:len(stems)]
+        else:
+            parts = slice_grid(strip, rows, len(stems) // rows)
         if parts is None:
             log(f"    didn't come apart into {len(stems)} figures; " + ("trying again" if attempt < 3 else "giving up"))
             continue

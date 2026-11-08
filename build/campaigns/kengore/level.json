@@ -1,0 +1,224 @@
+{
+ "character": "kengore",
+ "width": 2304,
+ "height": 224,
+ "floor_y": 150,
+ "story": {
+  "title": "Campus Cyber Crisis",
+  "boss_motive": "Kengore, the cybernetic evolution of Tonian, believes he is the pinnacle of human perfection. He seeks to conquer the campus with his automated army and replace the student body with code.",
+  "intro": "Kengore's mechanical forces have taken over the university quad! Drones and droids enforce his perfectionist regime across the grounds. Fight your way to the Beckman building to unplug his supreme ego!",
+  "boss_taunt": "Flesh is obsolete! Bow down before the pinnacle of evolution!",
+  "outro": "Kengore's cybernetic systems crash as his orbital targeter powers down. The campus is saved from total automated takeover!"
+ },
+ "back": {
+  "image": "back.png",
+  "parallax": 0.6
+ },
+ "floor": {
+  "image": "floor.png"
+ },
+ "props": [
+  {
+   "image": "props/terminal.png",
+   "x": 652,
+   "y": 152,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/planter.png",
+   "x": 1268,
+   "y": 154,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamp.png",
+   "x": 804,
+   "y": 155,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamp.png",
+   "x": 1504,
+   "y": 155,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/bench.png",
+   "x": 373,
+   "y": 155,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/terminal.png",
+   "x": 1214,
+   "y": 155,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamp.png",
+   "x": 202,
+   "y": 156,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamp.png",
+   "x": 490,
+   "y": 156,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamp.png",
+   "x": 1083,
+   "y": 156,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/bench.png",
+   "x": 895,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/terminal.png",
+   "x": 1750,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/planter.png",
+   "x": 1833,
+   "y": 157,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 705,
+   "y": 229,
+   "layer": "front",
+   "breakable": true
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 99,
+   "y": 233,
+   "layer": "front",
+   "breakable": true
+  },
+  {
+   "image": "props/trashcan.png",
+   "x": 1463,
+   "y": 236,
+   "layer": "front",
+   "breakable": true
+  }
+ ],
+ "enemies": [
+  {
+   "name": "Patrol Drone",
+   "look": "A hovering spherical chrome drone with a single red optical eye and dual stubby propellers.",
+   "personality": "Beeping and relentless",
+   "fighting_style": "Hovers just out of reach and dives at the player while firing tiny laser bursts.",
+   "moves": [
+    "Zap Beam (Fires a quick low-damage laser bolt)",
+    "Dive Bomb (Dives headfirst into the player)"
+   ],
+   "count": 8,
+   "sheet": "enemies/patrol_drone/sheet.json"
+  },
+  {
+   "name": "Campus Droid",
+   "look": "A bipedal robotic guard made of white polished plastic panels with blue LED visor strips.",
+   "personality": "Rigid and methodical",
+   "fighting_style": "Marches forward delivering precise robotic jabs and defensive blocks.",
+   "moves": [
+    "Piston Punch (A heavy forward punch)",
+    "Shock Palm (Stuns the player with an electrified hand strike)"
+   ],
+   "count": 6,
+   "sheet": "enemies/campus_droid/sheet.json"
+  },
+  {
+   "name": "Cyborg Enforcer",
+   "look": "A heavily armored cyborg with exposed metallic shoulders, red mechanical eyes, and a spiked gauntlet.",
+   "personality": "Cold and unstoppable, Kengore's elite muscle",
+   "fighting_style": "Slow, heavy-hitting brawler who walks through punches and crushes with his gauntlet.",
+   "moves": [
+    "Iron Jab: a heavy straight punch with his free fist",
+    "Gauntlet Smash: raises his arm high and smashes it down"
+   ],
+   "count": 2,
+   "sheet": "enemies/cyborg_enforcer/sheet.json"
+  }
+ ],
+ "waves": [
+  {
+   "x": 614,
+   "screen": 2,
+   "enemies": [
+    "Patrol Drone",
+    "Patrol Drone"
+   ]
+  },
+  {
+   "x": 998,
+   "screen": 3,
+   "enemies": [
+    "Patrol Drone",
+    "Patrol Drone",
+    "Patrol Drone"
+   ]
+  },
+  {
+   "x": 1382,
+   "screen": 4,
+   "enemies": [
+    "Patrol Drone",
+    "Patrol Drone",
+    "Patrol Drone",
+    "Campus Droid",
+    "Campus Droid"
+   ]
+  },
+  {
+   "x": 1766,
+   "screen": 5,
+   "enemies": [
+    "Campus Droid",
+    "Campus Droid",
+    "Campus Droid",
+    "Campus Droid",
+    "Cyborg Enforcer",
+    "Cyborg Enforcer"
+   ]
+  }
+ ],
+ "boss": {
+  "x": 1920,
+  "arena": "kengore_home",
+  "view": {
+   "x": 119.01,
+   "y": 22.08,
+   "scale": 0.6901,
+   "width": 384
+  }
+ },
+ "mini_boss": {
+  "character": "marcoos",
+  "name": "Marcoos",
+  "after_wave": 2,
+  "x": 1230,
+  "arena": "marcoos_home"
+ }
+}

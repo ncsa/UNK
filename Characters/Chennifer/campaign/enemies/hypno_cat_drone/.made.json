@@ -1,0 +1,17 @@
+{
+ "attack1_0": "765478aba7ae",
+ "attack1_1": "455636bad048",
+ "attack2_0": "1ba3bd996e3c",
+ "attack2_1": "46a318b45ba4",
+ "hit_0": "dace61716203",
+ "idle_0": "0cf415438beb",
+ "idle_1": "467d5564351e",
+ "ko_0": "aaba0464e066",
+ "ref": "7cfe12811402",
+ "walk_0": "strip",
+ "walk_1": "strip",
+ "walk_2": "strip",
+ "walk_3": "strip",
+ "walk_strip": "6f6b7f144893",
+ "walk_strip_drawn": "6f6b7f144893"
+}
