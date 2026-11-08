@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controller Test</title>
+<style>
+  body { background: #14141c; color: #e8e8f0; font: 16px/1.5 monospace; margin: 24px; }
+  h1 { color: #ffd23f; font-size: 20px; }
+  .pad { border: 1px solid #444; padding: 12px; margin: 12px 0; }
+  .btn { display: inline-block; min-width: 46px; text-align: center; margin: 3px; padding: 4px; border: 1px solid #555; }
+  .on { background: #ffd23f; color: #000; font-weight: bold; }
+  .axis { display: inline-block; margin-right: 16px; }
+  #last { color: #7dff8a; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>Controller test</h1>
+<p>Press any button on the controller (the browser only reports it after a press). Then press, one at a
+time: D-pad up, down, left, right, then A, B, X, Y, and move the left stick. Each press shows below.</p>
+<div id="last">Waiting for a controller...</div>
+<div id="pads"></div>
+<script>
+const last = document.getElementById("last"), padsEl = document.getElementById("pads");
+const prev = {};
+function frame() {
+  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+  padsEl.innerHTML = pads.map(p => `<div class="pad">
+    <div><b>${p.id}</b> · mapping: "<b>${p.mapping}</b>" · index ${p.index}</div>
+    <div>${p.buttons.map((b, i) => `<span class="btn ${b.pressed ? "on" : ""}">${i}</span>`).join("")}</div>
+    <div>${p.axes.map((a, i) => `<span class="axis">axis ${i}: ${a.toFixed(2)}</span>`).join("")}</div>
+  </div>`).join("") || "<p>No controller seen yet. Press a button on it.</p>";
+  for (const p of pads) {
+    const was = prev[p.index] || { b: [], a: [] };
+    p.buttons.forEach((b, i) => { if (b.pressed && !was.b[i]) last.textContent = `Last: button ${i} pressed`; });
+    p.axes.forEach((a, i) => { if (Math.abs(a - (was.a[i] ?? a)) > 0.5) last.textContent = `Last: axis ${i} moved to ${a.toFixed(2)}`; });
+    prev[p.index] = { b: p.buttons.map(b => b.pressed), a: [...p.axes] };
+  }
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

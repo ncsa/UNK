@@ -97,6 +97,10 @@
   ],
   "warnings": [],
   "frame_scale": {
-    "special2_0": 0.8
+    "special2_0": 0.8,
+    "crouch_0": 0.76,
+    "crouch_block_0": 0.8,
+    "crouch_punch_0": 0.75,
+    "crouch_punch_1": 0.76
   }
 }

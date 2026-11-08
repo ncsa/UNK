@@ -4,12 +4,14 @@
   "summary": "Arrogant, sassy, and mischievous fighter who mixes punches and kicks while jumping occasionally.",
   "source": {
     "text": "Tonian.txt",
+    "text_hash": "580fa659b2d6",
+    "parsed_text": "Tonian is arrogant, sassy, and mischievous.  He mixes punches and kicks, jumping occasionally.\n\nSpecial moves:\n- Giant denied stamp, he brings out an enormous DENIED stamp and stomps the other character with it, yelling out \"DENIED!!\".\n- You are mean to me twirl, he spins with fists out causing multiple punches to hit nearby enemies, yelling out \"why are you so mean to me!\".\n- Hurricane kick spinning in air",
     "image": "Tonian.jpeg",
     "health": 100,
     "strength": 100,
     "defense": 100,
-    "text_hash": "515740f04f7d",
-    "parsed_text": "Tonian is arrogant, sassy, and mischievous.  He mixes punches and kicks, jumping occasionally.\n\nSpecial moves:\n- Giant denied stamp, he brings out an enormous DENIED stamp and stomps the other character with it, yelling out \"DENIED!!\".\n- You are mean to me twirl, he spins with fists out causing multiple punches to hit nearby enemies, yelling out \"why are you so mean to me!\"."
+    "inferred": [],
+    "inferred_stats": null
   },
   "stats": {
     "health": 100,
@@ -51,6 +53,7 @@
         "W",
         "LMB"
       ],
+      "input_source": "stated",
       "effect": "stun",
       "shout": "DENIED!!",
       "pose_frames": [
@@ -72,6 +75,7 @@
         "D",
         "LMB"
       ],
+      "input_source": "stated",
       "effect": "area",
       "shout": "why are you so mean to me!",
       "pose_frames": [
@@ -79,6 +83,26 @@
         "Rapidly spinning on the spot with fists stretched outward"
       ],
       "height_ratio": 0.85,
+      "prop": null,
+      "prop_size": 0.5
+    },
+    {
+      "id": "special3",
+      "name": "Hurricane kick",
+      "description": "Spinning in air while unleashing consecutive kicks.",
+      "input": [
+        "S",
+        "A",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "hurricane",
+      "shout": null,
+      "pose_frames": [
+        "Crouching down slightly to prepare for a powerful leap",
+        "Upright in mid-air while spinning: torso straight up, fists raised guarding the chest, one leg kicked straight out sideways at hip height, fully extended toward the right, the other leg tucked up bent beneath the body with its foot hanging below. Exactly two legs. No motion lines, swirls, trails or effects of any kind"
+      ],
+      "height_ratio": 1.1,
       "prop": null,
       "prop_size": 0.5
     }

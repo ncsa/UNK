@@ -91,10 +91,20 @@ ANIMATIONS = {
         ("fighting stance, fists raised to guard the face, knees slightly bent, weight on the back foot", "idle"),
         ("the same fighting stance at the low point of a breathing bounce, shoulders slightly lowered", "idle"),
     ]),
-    "walk": dict(fps=6, loop=True, fit=("h", 1.0), frames=[
-        ("walking forward in fighting stance, front leg stepping forward, fists up", "idle"),
-        ("walking forward in fighting stance, back leg passing the front leg, fists up", "idle"),
-    ]),
+    # Eight steps, as in a hand-animated arcade walk. strip: all eight are drawn together in one
+    # picture (WALK_STRIP_PROMPT) and cut apart: drawn one at a time they came out unrelated, and kept
+    # falling back to the wide fighting stance. These pose lines are what each cut-out frame is checked
+    # against. "near" leg = closest to the viewer.
+    "walk": dict(fps=12, loop=True, fit=("walk",), strip=True, rows=2, frames=[(pose, "idle") for pose in (
+        "walking: a long stride, near leg forward with its heel down, far leg behind with its heel up",
+        "walking: weight onto the near leg, far knee bending, far foot lifting off the ground behind",
+        "walking: passing, far foot tucked up behind the standing near leg, feet together under the hips",
+        "walking: far knee swinging forward and up in front, its foot off the ground",
+        "walking: far leg reaching forward, heel about to land, near heel rising behind",
+        "walking: a long stride, far leg forward with its heel down, near leg behind with its heel up",
+        "walking: weight onto the far leg, near knee bending, near foot lifting off the ground behind",
+        "walking: passing, near foot tucked up behind the standing far leg, feet together under the hips",
+    )]),
     "crouch": dict(fps=1, loop=False, fit=("h", 0.9), hurt_h=0.6, frames=[
         # Spelled out as body geometry: vaguer prompts came back standing or only slightly bent.
         ("LOW FIGHTING CROUCH as in Street Fighter II (hold down): a deep squat with the hips dropped "
@@ -200,6 +210,36 @@ Requirements:
 - no text, no UI, no shadow, no ground, no rocks, no other people, no animals or objects held{prop_note}
 - background: perfectly flat solid magenta (#FF00FF) with no gradient or texture"""
 
+WALK_STRIP_PROMPT = """Using the reference images, draw a WALK CYCLE sprite sheet for a 1990s SNES 16-bit fighting game.
+The first image is the character; the second is an approved sprite of them: match its art style, pixel size,
+colors, build and viewing angle exactly. Show the SAME character 8 times in TWO ROWS OF FOUR (frames 1-4 in
+the top row left to right, frames 5-8 in the bottom row left to right), evenly spaced in a grid with wide
+magenta gaps between figures and between the rows, each full-body and facing RIGHT in the SAME three-quarter view as the second image (turned toward
+the viewer, not a flat side view), with the same broad shoulders and body width and the same size, all standing
+on the same ground line, with clear magenta space between them: no two figures touch or overlap.
+
+Upper body, the same in all 8, as in the second image: fists up guarding the face, torso upright.
+Legs: one smooth walking cycle, changing only a little from each frame to the next, like a hand-animated
+arcade walk, with a LONG confident stride: at the two widest steps (1 and 6) the feet are far apart, about half
+the character's height, the legs in a wide inverted V. Knees slightly bent. The near leg is the one closest to
+the viewer.
+1. widest step: near leg forward, heel down; far leg stretched out behind, heel up, toes pushing off
+2. weight onto the near leg; far knee bends, far foot lifts off the ground behind
+3. passing: far foot tucked up behind the standing near leg, knee bent; feet together under the hips
+4. far knee swings forward and up in front of the body, its foot off the ground
+5. far leg reaches forward, heel about to land; near leg behind, heel rising
+6. widest step: far leg forward, heel down; near leg stretched out behind, heel up, toes pushing off
+7. weight onto the far leg; near knee bends, near foot lifts off the ground behind
+8. passing: near foot tucked up behind the standing far leg, knee bent; feet together under the hips
+
+Exactly two legs and two arms in every figure. No text, no numbers, no ground, no shadows.
+Background: perfectly flat solid magenta (#FF00FF) with no gradient or texture."""
+
+EDIT_PROMPT = """Edit this sprite from a 1990s SNES "Street Fighter II" style 2D fighting game: {pose}.
+Change ONLY the legs and feet. Keep everything else exactly as it is: the same character, face, clothes,
+colors, upper body, arms and fists, the same size and position in the image, the same 16-bit pixel-art
+style, and the flat magenta background. Exactly two legs."""
+
 PROP_PROMPT = """Draw a single object as a sprite for a 1990s SNES "Street Fighter II" style 2D fighting game: {description}
 Requirements: only the object, no people, no hands, no text unless the description asks for it,
 16-bit pixel-art style with crisp pixels and dark outlines, centered, filling about 80% of the image,
@@ -236,6 +276,8 @@ Rules:
   "uppercut" (a rising jump attack that launches the opponent into the air),
   "flurry" (a rapid burst of many kicks or punches in place, hitting over and over),
   "flip" (a crouch then a rising backflip or somersault kick that launches the opponent),
+  "hurricane" (a hop, then spinning like a top through the air with a leg out, travelling forward and kicking
+  the opponent several times),
   "audit" (bureaucratic money trouble: a calculator sprays a fan of numbers across the screen and, if it
   reaches the opponent, their money bursts out of their pockets and whirls around them, pelting them),
   "orbital" (a strike from the sky or space: a target locks onto the opponent, then a giant beam or
@@ -296,7 +338,7 @@ PARSE_SCHEMA = {
             "description": {"type": "string"},
             "input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
             "suggested_input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
-            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "flurry", "flip", "audit", "orbital", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
+            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "flurry", "flip", "hurricane", "audit", "orbital", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
             "pose_frames": {"type": "array", "items": {"type": "string"}},
             "height_ratio": {"type": "number"},
             "prop": {"type": ["string", "null"]},
@@ -391,13 +433,36 @@ def notes_removed(text):
     return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
 
 
+# "Mini boss: <character>" in a profile is for add_campaign.py (who the player meets halfway along
+# this character's campaign street). It isn't part of the fighter, so the parser never sees it and
+# adding or changing it doesn't re-parse the profile.
+MINI_BOSS_LINE = re.compile(r"(?im)^[ \t]*mini[ -]?boss[ \t]*:[^\n]*(?:\n|$)")
+
+
+def mini_boss_of(txt):
+    """The character named on a profile's "Mini boss:" line, or None."""
+    m = MINI_BOSS_LINE.search(txt.read_text()) if txt and txt.exists() else None
+    return (m.group(0).split(":", 1)[1].strip() or None) if m else None
+
+
 def profile_text(txt):
-    """The text file without its # note lines."""
-    return notes_removed(txt.read_text())
+    """The text file without its # note lines (or a mini boss line)."""
+    return notes_removed(MINI_BOSS_LINE.sub("", txt.read_text()))
 
 
 def text_hash(txt):
-    return hashlib.sha1(txt.read_bytes()).hexdigest()[:12] if txt else None
+    return text_hashes(txt)[0] if txt else None
+
+
+def text_hashes(txt):
+    """Hashes the profile counts as unchanged under: its bytes without a mini boss line, also with
+    the blank line or two left where one was added at the end."""
+    if not txt:
+        return [None]
+    text = txt.read_text()
+    bare = MINI_BOSS_LINE.sub("", text)
+    h = lambda t: hashlib.sha1(t.encode()).hexdigest()[:12]
+    return [h(bare)] + ([h(bare.rstrip("\n")), h(bare.rstrip("\n") + "\n")] if bare != text else [])
 
 
 # --------------------------------------------------------------------------- Gemini
@@ -474,11 +539,11 @@ def gemini():
     return _client
 
 
-def generate_image(prompt, refs, attempts=3):
+def generate_image(prompt, refs, attempts=3, aspect="1:1"):
     from google.genai import types
     contents = [prompt] + list(refs)
     config = types.GenerateContentConfig(
-        response_modalities=["IMAGE"], image_config=types.ImageConfig(aspect_ratio="1:1"))
+        response_modalities=["IMAGE"], image_config=types.ImageConfig(aspect_ratio=aspect))
     for attempt in range(1, attempts + 1):
         try:
             resp = gemini().models.generate_content(model=IMAGE_MODEL, contents=contents, config=config)
@@ -724,7 +789,7 @@ def stage_parse(folder, reparse):
         recorded = existing["source"]["text_hash"]
         if existing.get("draft") and txt:
             log(f"  parse: {txt.name} added, parsing it")
-        elif recorded != text_hash(txt):
+        elif recorded not in text_hashes(txt):
             log(f"  parse: {txt.name} changed, re-parsing")
         elif gemini() and existing.get("parsed_offline"):
             log("  parse: re-parsing with Gemini (last parse was offline)")
@@ -844,7 +909,9 @@ def frame_plan(char):
         for i, pose in enumerate(sp["pose_frames"]):
             plan.append((f"{sp['id']}_{i}", sp["id"], dict(
                 pose=f"special move \"{sp['name']}\": {pose}", expression=char["expressions"]["attack"],
-                prop=sp["prop"] if sp["effect"] not in ("projectile", "beam") or i == 0 else None)))
+                # a strike from the sky ("orbital") falls separately: the fighter doesn't hold its prop
+                prop=None if sp["effect"] == "orbital" else
+                     sp["prop"] if sp["effect"] not in ("projectile", "beam") or i == 0 else None)))
         if sp["prop"]:
             plan.append((f"prop_{sp['id']}", "prop", dict(description=sp["prop"])))
         for name, extra in sp.get("extra_props", {}).items():
@@ -871,6 +938,11 @@ def stage_frames(folder, char, only, force, check=False):
     for stem, kind, data in plan:
         path = frames_dir / f"{stem}.png"
         selected = not only or kind in only or stem in only
+        if ANIMATIONS.get(kind, {}).get("strip"):
+            if stem.endswith("_0") and (selected or not path.exists()):
+                stage_walk_strip(frames_dir, ref, made, force and selected, char)
+                write_made(frames_dir, made)
+            continue
         key = frame_key(kind, data)
         if path.exists() and stem not in made:
             made[stem] = key  # made before keys were recorded (or by hand): treat as current
@@ -891,7 +963,12 @@ def stage_frames(folder, char, only, force, check=False):
         if "idle_0" in placeholders:
             anchor = frames_dir / "missing"
         refs = [ref]
-        if kind == "prop":
+        index = int(stem.rsplit("_", 1)[1]) if stem.rsplit("_", 1)[-1].isdigit() else None
+        source = ANIMATIONS.get(kind, {}).get("edit_from", {}).get(index)
+        if source and (frames_dir / f"{source}.png").exists():
+            prompt = EDIT_PROMPT.format(pose=data["pose"])
+            refs = [Image.open(frames_dir / f"{source}.png").convert("RGB")]
+        elif kind == "prop":
             prompt = PROP_PROMPT.format(description=data["description"])
             refs = []
         elif kind == "portrait":
@@ -1147,6 +1224,125 @@ def frame_geometry(img, idle_reach, active, lying=False, hurt_h=None, base=SPRIT
     return geo
 
 
+def slice_strip(img, n):
+    """Cut a row of n evenly spaced figures on a flat background into n images (each on the background
+    colour), or None if it doesn't look like n figures. Figures drawn close enough to touch (a fist in
+    the next one's back) are cut at the emptiest column near each expected boundary, and each piece
+    keeps only its own figure."""
+    cut = drop_specks(remove_background(img), min_frac=0.004)
+    a = np.asarray(cut)[:, :, 3] > 0
+    w = a.shape[1]
+    occupied = np.nonzero(a.any(axis=0))[0]
+    if not len(occupied):
+        return None
+    x0, x1 = occupied[0], occupied[-1] + 1
+    cell = (x1 - x0) / n
+    counts = a.sum(axis=0)
+    cuts = [x0]
+    for k in range(1, n):
+        lo, hi = int(x0 + cell * (k - 0.35)), int(x0 + cell * (k + 0.35))
+        cuts.append(lo + int(np.argmin(counts[lo:hi])))
+    cuts.append(x1)
+    rgb = np.asarray(img.convert("RGB"))
+    bg = np.median(np.concatenate([rgb[0], rgb[-1]]), axis=0).astype(np.uint8)
+    out, sizes = [], []
+    for c0, c1 in zip(cuts, cuts[1:]):
+        m = a[:, c0:c1]
+        labels, nl = ndimage.label(m, structure=np.ones((3, 3)))
+        if not nl:
+            return None
+        size = np.bincount(labels.ravel()); size[0] = 0
+        keep = size >= size.max() * 0.08  # the figure, plus anything big that broke off it
+        mask = keep[labels]
+        part = np.full((a.shape[0], c1 - c0 + 12, 3), bg, np.uint8)
+        part[:, 6:6 + c1 - c0][mask] = rgb[:, c0:c1][mask]
+        out.append(Image.fromarray(part))
+        sizes.append(mask.sum())
+    if min(sizes) < max(sizes) * 0.5:  # a piece that's mostly empty: not n figures after all
+        return None
+    return out
+
+
+def slice_grid(img, rows, per_row):
+    """A grid of figures (rows x per_row, read row by row) cut into images; None if it won't come apart.
+    Rows are split at the emptiest band of pixel rows near each expected boundary."""
+    a = np.asarray(drop_specks(remove_background(img), min_frac=0.004))[:, :, 3] > 0
+    counts = a.sum(axis=1)
+    filled = np.nonzero(counts)[0]
+    if not len(filled):
+        return None
+    y0, y1 = filled[0], filled[-1] + 1
+    band = (y1 - y0) / rows
+    cuts = [0]
+    for k in range(1, rows):
+        lo, hi = int(y0 + band * (k - 0.3)), int(y0 + band * (k + 0.3))
+        cuts.append(lo + int(np.argmin(counts[lo:hi])))
+    cuts.append(img.height)
+    out = []
+    for c0, c1 in zip(cuts, cuts[1:]):
+        parts = slice_strip(img.crop((0, c0, img.width, c1)), per_row)
+        if parts is None:
+            return None
+        out += parts
+    return out
+
+
+def stage_walk_strip(frames_dir, ref, made, force, char, prompt=WALK_STRIP_PROMPT, poses=None, rows=None,
+                     check=True):
+    """All of the walk's frames from one generated strip (see WALK_STRIP_PROMPT); cached like frames.
+    add_campaign.py reuses it for street enemies with its own prompt, poses (one per frame, for the
+    anatomy check), rows, and check=False for machines."""
+    spec = ANIMATIONS["walk"]
+    poses = poses or [pose for pose, _ in spec["frames"]]
+    rows = rows or spec["rows"]
+    stems = [f"walk_{i}" for i in range(len(poses))]
+    k = frame_key("walk", {"pose": prompt})
+    if not force and all((frames_dir / f"{st}.png").exists() for st in stems) and made.get("walk_strip") == k:
+        return
+    anchor = frames_dir / "idle_0.png"
+    refs = [ref] + ([Image.open(anchor).convert("RGB")] if anchor.exists() else [])
+    saved = frames_dir / "walk_strip.png"
+    for attempt in range(1, 4):
+        if attempt == 1 and saved.exists() and made.get("walk_strip_drawn") == k and not force:
+            log("  frames: cutting up the walk strip drawn last time")
+            strip = Image.open(saved).convert("RGB")
+        else:
+            log(f"  frames: generating the walk strip ({len(stems)} frames in one picture)")
+            strip = generate_image(prompt, refs, aspect="16:9")
+            strip.save(saved)
+            made["walk_strip_drawn"] = k
+            write_made(frames_dir, made)
+        parts = slice_grid(strip, rows, len(stems) // rows)
+        if parts is None:
+            log(f"    didn't come apart into {len(stems)} figures; " + ("trying again" if attempt < 3 else "giving up"))
+            continue
+        problems = [f"{st}: {', '.join(pr)}" for st, im, pose in zip(stems, parts, poses)
+                    if check and (pr := anatomy_problems(im, pose, False))]
+        if problems and attempt < 3:
+            log(f"    {'; '.join(problems)}; trying again")
+            continue
+        for st, im in zip(stems, parts):
+            im.save(frames_dir / f"{st}.png")
+            made[st] = "strip"
+        made["walk_strip"] = k
+        for old in frames_dir.glob("walk_*.png"):  # frames from a longer walk before this one
+            if old.stem not in stems and old.stem != "walk_strip":
+                old.unlink()
+        if problems:
+            log(f"    keeping it anyway, check by hand: {'; '.join(problems)}")
+        return
+    log("  frames: no usable walk strip; the walk is unchanged")
+
+
+def torso_x(img):
+    """Horizontal centre of the chest (a band from a fifth to half way down the figure)."""
+    a = np.asarray(img)[:, :, 3] > 0
+    ys = np.nonzero(a.any(axis=1))[0]
+    top, h = ys.min(), ys.max() - ys.min() + 1
+    band = a[top + int(h * 0.2):top + int(h * 0.5)]
+    return float(np.nonzero(band)[1].mean())
+
+
 def pack(frames, pad=1):
     """Shelf-pack a list of RGBA images; returns sheet and rects."""
     width = 1024
@@ -1200,6 +1396,15 @@ def stage_sheet(folder, char):
             # standing sprite, e.g. {"special2_0": 0.8} for a crouching special pose that the
             # generator drew as tall as a standing one.
             fit = spec["fits"][i] if spec.get("fits") else spec["fit"]
+            if fit == ("walk",):
+                # Walk frames are scaled together, a row of the drawn grid at a time (the model draws one
+                # row a little smaller than another): its tallest frame is full height, the rest keep their
+                # size relative to it, so the head dips a little on the strides.
+                per_row = len(spec["frames"]) // spec.get("rows", 1)
+                tallest = max(raw(f"{name}_{j}").getbbox()[3] - raw(f"{name}_{j}").getbbox()[1]
+                              for j in range(len(spec["frames"])) if j // per_row == i // per_row)
+                box = raw(f"{name}_{i}").getbbox()
+                fit = ("h", (box[3] - box[1]) / tallest)
             if f"{name}_{i}" in char.get("frame_scale", {}):
                 fit = ("h", char["frame_scale"][f"{name}_{i}"])
             imgs.append(fit_scale(raw(f"{name}_{i}"), fit, idle_height, base))
@@ -1207,7 +1412,9 @@ def stage_sheet(folder, char):
 
     palette = build_palette(processed["idle"] + processed["punch"] + processed["kick"])
     idle = processed["idle"][0]
-    idle_reach = idle.width - frame_geometry(idle, 0, False, base=base)["ax"]
+    idle_geo = frame_geometry(idle, 0, False, base=base)
+    idle_reach = idle.width - idle_geo["ax"]
+    idle_torso = torso_x(idle) - idle_geo["ax"]  # where the chest sits relative to the feet when standing
 
     order, meta = [], {}
     for name, imgs in processed.items():
@@ -1217,6 +1424,10 @@ def stage_sheet(folder, char):
             raw = np.asarray(im).astype(int)  # before the palette, which mutes a bright beam's color
             im = apply_palette(im, palette)
             geo = frame_geometry(im, idle_reach, i in spec.get("active", []), name == "ko", spec.get("hurt_h"), base)
+            if name == "walk":
+                # Pinned by the chest, not the feet: on a passing step only the back foot is on the
+                # ground, and anchoring there threw the body forward every other frame.
+                geo["ax"] = int(round(torso_x(im) - idle_torso))
             if name.startswith("special"):
                 # The highest point (e.g. an uppercut's raised fist) and the front-most point (a fist
                 # thrust forward), relative to the feet, for the game to attach things to.

@@ -17,3 +17,4 @@ Special moves:
 # - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!".
 - Street fighter Chun-Li style rapid kicks
 - Street fighter Guile style spin kick
+- Uses her cell phone to make a call resulting in a giant hippo falling from the sky and crushing her opponent

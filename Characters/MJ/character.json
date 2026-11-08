@@ -4,8 +4,8 @@
   "summary": "A martial artist who utilizes lightning-fast kick maneuvers inspired by classic arcade fighting styles.",
   "source": {
     "text": "MJ.txt",
-    "text_hash": "b4313d15a825",
-    "parsed_text": "MJ is ...\n\n\nSpecial moves:\n- Street fighter Chun-Li style rapid kicks\n- Street fighter Guile style spin kick",
+    "text_hash": "690d009e1146",
+    "parsed_text": "MJ is ...\n\n\nSpecial moves:\n- Street fighter Chun-Li style rapid kicks\n- Street fighter Guile style spin kick\n- Uses her cell phone to make a call resulting in a giant hippo falling from the sky and crushing her opponent",
     "image": "MJ.jpeg",
     "health": 95,
     "strength": 105,
@@ -86,11 +86,34 @@
       "shout": "Hi-YAH!",
       "pose_frames": [
         "Crouching low to store momentum",
-        "Flipping upside-down into the air while sweeping both legs in an arc"
+        "Upside down at the top of a backflip: head toward the ground, arms tucked in close beside the head, the body arched back. One leg is bent sharply at the knee, folded in over the body with its foot near the hip; the other leg is kicked out straight and fully extended, up and toward the right, its foot leading the kick. Exactly two legs. No motion lines, arcs, trails or effects of any kind"
       ],
       "height_ratio": 1.2,
       "prop": null,
       "prop_size": 1.0
+    },
+    {
+      "id": "special3",
+      "name": "Hippo Drop",
+      "description": "Uses her cell phone to make a call resulting in a giant hippo falling from the sky and crushing her opponent",
+      "input": [
+        "S",
+        "D",
+        "S",
+        "D",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "orbital",
+      "shout": "Delivery incoming!",
+      "cooldown": 12,
+      "pose_frames": [
+        "Holding a cell phone to her ear while dialing",
+        "Points up at the sky while smirking"
+      ],
+      "height_ratio": 1.0,
+      "prop": "A massive, heavy hippopotamus falling downward",
+      "prop_size": 2.0
     }
   ],
   "warnings": [],

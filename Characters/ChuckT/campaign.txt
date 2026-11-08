@@ -1,0 +1,21 @@
+# Campaign for ChuckT: a side-scrolling street level that ends at ChuckT's arena, where ChuckT
+# waits as the boss. Fill this in, then run add_campaign.py again: only what changed is redrawn.
+# Lines starting with # are ignored. Write as much or as little as you like; anything left out is
+# made up to fit ChuckT.
+
+Story:
+ChuckT, the university's most feared auditor, has declared the College of Engineering "fiscally
+non-compliant." He has frozen every research budget, seized the coffee machines as unreported
+assets, and barricaded himself inside Engineering Hall until every expense report since 1998 is
+re-filed in triplicate. The player has a grant due at 5pm and needs one signature from inside.
+
+Setting:
+The walk across the main quad toward Engineering Hall, past old stone campus buildings. The audit
+has spilled outside: stacks of file boxes, paper shredders and filing cabinets dragged out onto the
+plaza, with red tape strung between the lamp posts.
+
+Enemies:
+- Audit Intern: a jittery intern in an oversized blazer and lanyard who swings a clipboard and throws stacks of forms; weak, but they come in groups (x5)
+- Compliance Officer: a stern officer in a gray suit carrying a giant red DENIED stamp; blocks a lot and stamps hard (x3)
+- Shredder Bot: a rolling office paper shredder on wheels that charges at your legs and spits confetti (x2)
+- Expense Report Golem: a hulking figure made of crumpled receipts and binder clips; slow but hits hard, shows up near the end (x1)

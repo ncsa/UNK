@@ -1,0 +1,108 @@
+{
+  "horizon": 0.85,
+  "floor_y": 150,
+  "back_parallax": 0.6,
+  "fore_parallax": 1.3,
+  "title": "Fiscal Lockdown",
+  "boss_motive": "ChuckT has declared the College of Engineering fiscally non-compliant, freezing research budgets and seizing coffee machines until decades of paperwork are re-filed.",
+  "intro": "It's 4:30 PM and your research grant deadline is at 5:00 PM. ChuckT has locked down Engineering Hall and barricaded the dean inside! Fight your way across the audit-strewn campus quad to get your form signed in time.",
+  "boss_taunt": "Your budget request is REJECTED! Time for your final audit!",
+  "outro": "ChuckT drops his calculator in defeat, and the grant gets signed with two minutes to spare. Coffee machines across campus begin brewing once again.",
+  "screens": 6,
+  "scenery": "Starting at the grand tan brick Engineering building with its arched entryway, the path leads left across a cobblestone campus plaza. Lush green oak trees frame historic stone academic halls, transitioning into wide manicured lawns bordered by classical brick clock towers and ivy-covered lecture halls under a crisp blue sky.",
+  "props": [
+    {
+      "name": "lamppost",
+      "description": "An ornate black iron campus lamp post wrapped tightly in glossy red caution tape.",
+      "size": 1.45,
+      "where": "back"
+    },
+    {
+      "name": "cabinet",
+      "description": "A heavy gray metal four-drawer filing cabinet with paper bursting out of the top drawer.",
+      "size": 0.85,
+      "where": "back"
+    },
+    {
+      "name": "shredder",
+      "description": "A tall black plastic office paper shredder overflowing with cut paper strips.",
+      "size": 0.55,
+      "where": "front"
+    },
+    {
+      "name": "bench",
+      "description": "A classic dark green wooden campus park bench with cast-iron legs.",
+      "size": 0.42,
+      "where": "back"
+    },
+    {
+      "name": "boxes",
+      "description": "A stack of three cardboard file storage boxes marked with red ink markers.",
+      "size": 0.65,
+      "where": "back"
+    }
+  ],
+  "fore": "Overhanging green leafy tree branches framing the top border of the screen.",
+  "enemies": [
+    {
+      "name": "Audit Intern",
+      "look": "A twitchy youngster wearing an oversized navy blue blazer, khaki pants, and a thick blue lanyard swinging around their neck.",
+      "personality": "Panicked and overworked",
+      "fighting_style": "Switches quickly between frantic wild clipboard swings and throwing loose paper.",
+      "moves": [
+        "Clipboard Smack: Swings a hard wooden clipboard in a quick horizontal arc.",
+        "Form Toss: Flings a stack of printed budget sheets forward like throwing stars."
+      ],
+      "count": 5,
+      "first_screen": 1,
+      "body": "humanoid",
+      "height": 0.95
+    },
+    {
+      "name": "Compliance Officer",
+      "look": "A tall, imposing figure in a neat gray business suit wearing dark aviator sunglasses.",
+      "personality": "Strict and bureaucratic",
+      "fighting_style": "Defensive posture with powerful front-facing counter-attacks.",
+      "moves": [
+        "Denied Stamp: Slam-dunks a massive red hand stamp directly onto the player's head.",
+        "Red Tape Block: Holds up a heavy briefcase to block incoming attacks."
+      ],
+      "count": 3,
+      "first_screen": 2,
+      "body": "humanoid",
+      "height": 1.08
+    },
+    {
+      "name": "Shredder Bot",
+      "look": "A boxy grey motorized unit on small rubber wheels with visible gears and sharp rotating blades in its top slot.",
+      "personality": "Mindless and aggressive",
+      "fighting_style": "Drives rapidly back and forth across the ground, attacking low.",
+      "moves": [
+        "Confetti Spray: Fires a high-velocity burst of sharp paper shreds directly ahead.",
+        "Ankle Grind: Charges forward at high speed aiming to run over toes."
+      ],
+      "count": 2,
+      "first_screen": 3,
+      "body": "other",
+      "height": 0.55
+    },
+    {
+      "name": "Expense Report Golem",
+      "look": "A bulky eight-foot humanoid constructed entirely out of compressed white receipts, blue binder clips, and manila folders.",
+      "personality": "Unstoppable and dense",
+      "fighting_style": "Slow lumbering movements with immense crushing physical strikes.",
+      "moves": [
+        "Receipt Slam: Double-axe handles both hands downward onto the ground.",
+        "Binder Clip Pinch: Reaches out with massive metallic clips to grab and crush."
+      ],
+      "count": 1,
+      "first_screen": 5,
+      "body": "humanoid",
+      "height": 1.35
+    }
+  ],
+  "source": {
+    "text_hash": "b245736ec728",
+    "parsed_text": "Story:\nChuckT, the university's most feared auditor, has declared the College of Engineering \"fiscally\nnon-compliant.\" He has frozen every research budget, seized the coffee machines as unreported\nassets, and barricaded himself inside Engineering Hall until every expense report since 1998 is\nre-filed in triplicate. The player has a grant due at 5pm and needs one signature from inside.\n\nSetting:\nThe walk across the main quad toward Engineering Hall, past old stone campus buildings. The audit\nhas spilled outside: stacks of file boxes, paper shredders and filing cabinets dragged out onto the\nplaza, with red tape strung between the lamp posts.\n\nEnemies:\n- Audit Intern: a jittery intern in an oversized blazer and lanyard who swings a clipboard and throws stacks of forms; weak, but they come in groups (x5)\n- Compliance Officer: a stern officer in a gray suit carrying a giant red DENIED stamp; blocks a lot and stamps hard (x3)\n- Shredder Bot: a rolling office paper shredder on wheels that charges at your legs and spits confetti (x2)\n- Expense Report Golem: a hulking figure made of crumpled receipts and binder clips; slow but hits hard, shows up near the end (x1)"
+  }
+}

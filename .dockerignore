@@ -12,6 +12,7 @@ CharacterRequests/
 # Generation inputs and caches the server doesn't read: the raw sprite frames (the built
 # sheets in build/characters are what it serves), raw ElevenLabs audio, audition reels.
 Characters/*/frames/
+Characters/*/campaign/
 Sounds/raw/
 Sounds/audition/
 
@@ -23,6 +24,7 @@ SplastScreen.jpeg
 
 # The asset tools run on your machine, never in the image.
 add_character.py
+add_campaign.py
 make_sounds.py
 check_gemini.py
 requirements.txt

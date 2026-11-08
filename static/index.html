@@ -104,14 +104,6 @@
   .card .name { font-size: 10px; }
   .card .meta { font-size: 8px; color: var(--dim); line-height: 1.8; }
   .card .portrait.unknown { display: grid; place-items: center; font-size: 40px; color: var(--dim); }
-  .card.soon { position: relative; cursor: not-allowed; }
-  .card.soon:hover { border-color: var(--edge); }
-  .card.soon > :not(.stamp) { opacity: 0.45; }
-  .card .portrait.campaign { background: url("/assets/map.jpeg") center / cover; image-rendering: pixelated; }
-  .card .stamp { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) rotate(-16deg);
-    color: #e83a3a; border: 3px solid #e83a3a; padding: 6px 8px; font-size: 13px; line-height: 1.4;
-    text-align: center; letter-spacing: 1px; background: rgba(20, 0, 0, 0.35); white-space: nowrap;
-    box-shadow: 0 0 0 1px rgba(232, 58, 58, 0.35), inset 0 0 0 1px rgba(232, 58, 58, 0.35); pointer-events: none; }
   .stat i.unknown { background: repeating-linear-gradient(90deg, var(--dim) 0 4px, transparent 4px 8px); }
   .stat { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 4px; }
   .stat i { display: block; height: 6px; background: var(--gold); }
@@ -124,6 +116,13 @@
   #fight-btn { width: 100%; margin-top: 16px; font-size: 18px; padding: 14px 28px; background: var(--red); color: #fff;
     border: 3px solid #fff; box-shadow: 4px 4px 0 #000; }
   #fight-btn:disabled { opacity: .4; cursor: default; }
+  /* The opponent's campaign, when they have one: under FIGHT!, same width, quieter */
+  #campaign-btn { width: 100%; margin-top: 10px; font-size: 13px; padding: 10px 12px; background: var(--panel);
+    color: var(--gold); border: 3px solid var(--gold); box-shadow: 4px 4px 0 #000; line-height: 1.6; }
+  #campaign-btn small { display: block; font-size: 8px; color: var(--text); }
+  #campaign-btn:hover:not(:disabled) { background: #2a2a10; }
+  #campaign-btn:disabled { opacity: .4; cursor: default; }
+  #campaign-btn[hidden] { display: none; }
   /* Arena preview: pops in under the controls panel whenever the opponent changes. */
   .side { align-self: start; }
   #arena-preview { margin: 12px 0 0; background: var(--panel); border: 3px solid var(--edge); padding: 6px;
@@ -158,7 +157,7 @@
   #results { max-width: 560px; margin: 0 auto; padding: 40px 16px; text-align: center; }
   #results h1 { font-size: 32px; }
   #result-score { font-size: 22px; color: var(--gold); margin: 18px 0 6px; }
-  #result-detail { color: var(--dim); font-size: 10px; }
+  #result-detail { color: var(--dim); font-size: 10px; white-space: pre-line; line-height: 1.8; }
   #results aside { text-align: left; margin: 24px 0; }
   /* Arcade initials entry (guest account) */
   #initials { margin: 22px 0 6px; }
@@ -173,6 +172,8 @@
   .buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .buttons button { padding: 12px 18px; background: var(--panel); color: var(--text); border: 3px solid var(--edge); }
   .buttons button:first-child { background: var(--red); border-color: #fff; }
+  /* The controller's menu highlight (static/gamepad.js). */
+  .pad-focus { outline: 3px solid #7dd8ff !important; outline-offset: 2px; }
 </style>
 </head>
 <body>
@@ -259,6 +260,8 @@
         sweeps: block low · air attacks: block standing<br>
         <b>COMBOS</b>: land hits back to back for big points<br>
         <b>Esc</b> pause · <b>M</b> music · <b>N</b> sound effects (here or paused)<br>
+        <b>XBOX PAD</b>: stick/D-pad move · <b>X</b> punch · <b>Y</b>/<b>B</b> kick · <b>A</b> jump · <b>Start</b> pause<br>
+        street: <b>B</b>/<b>RB</b> block · <b>LB</b> crouch · menus: D-pad + <b>A</b><br>
         SPECIALS (<span class="arrow">→</span> = toward opponent)<br>
         <span id="special-help"></span>
       </div>
@@ -271,6 +274,7 @@
         <button data-level="easy">EASY</button><button data-level="medium">MEDIUM</button><button data-level="hard">HARD</button>
       </div>
       <button id="fight-btn" disabled>FIGHT!</button>
+      <button id="campaign-btn" hidden>CAMPAIGN</button>
     </div>
   </div>
 </section>
@@ -300,5 +304,7 @@
 
 <script src="/static/sound.js"></script>
 <script src="/static/game.js"></script>
+<script src="/static/brawl.js"></script>
+<script src="/static/gamepad.js"></script>
 </body>
 </html>

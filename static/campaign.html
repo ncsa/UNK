@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campaign Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+  body { margin: 0; background: #0b0b16; color: #ccd; font: 10px/1.8 "Press Start 2P", monospace;
+    display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px; }
+  canvas { width: min(100%, 1152px); aspect-ratio: 384 / 224; image-rendering: pixelated; background: #000; }
+  p { margin: 0; text-align: center; }
+  b { color: #ffd23f; font-weight: normal; }
+  #story { max-width: 1152px; width: 100%; line-height: 2; }
+  #story h2 { color: #ffd23f; font-size: 12px; margin: 0 0 6px; font-weight: normal; }
+  #story .motive { color: #aab; margin: 0 0 10px; text-align: left; }
+  #roster { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  #roster div { border: 2px solid #33334a; padding: 8px; background: #15152a; font-size: 8px; line-height: 1.9; }
+  #roster strong { color: #ffd23f; font-weight: normal; font-size: 9px; }
+  #roster em { color: #ff8a8a; font-style: normal; }
+  #roster canvas { float: right; width: 64px; height: 96px; aspect-ratio: auto; background: none; margin: 0 0 4px 8px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="384" height="224"></canvas>
+<p><b>← →</b> walk · <b>↑ ↓</b> move in depth · <b>Z</b> punch · <b>SPACE</b> auto-walk · <b>F</b> fighter · <b>D</b> debug lines</p>
+<p id="info"></p>
+<section id="story"></section>
+<script>
+// Preview of a campaign level built by add_campaign.py: /static/campaign.html?c=<character slug>
+const W = 384, H = 224;
+const params = new URLSearchParams(location.search);
+const slug = params.get("c") || "chuckt";
+const base = `/assets/campaigns/${slug}/`;
+const ctx = document.getElementById("c").getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const load = src => new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
+const keys = new Set();
+addEventListener("keydown", e => {
+  if (e.key.startsWith("Arrow") || e.key === " ") e.preventDefault();
+  keys.add(e.key);
+  if (e.key === " ") state.auto = !state.auto;
+  if (e.key === "d" || e.key === "D") state.debug = !state.debug;
+  if (e.key === "f" || e.key === "F") nextFighter();
+  if ((e.key === "z" || e.key === "Z") && !e.repeat) punch();
+});
+addEventListener("keyup", e => keys.delete(e.key));
+
+const state = { auto: false, debug: false, x: 60, y: 0, facing: 1, t: 0, moving: false, punch: 0 };
+let level, imgs = {}, fighter = null, fighters = [], fi = 0;
+let kinds = {}, foes = [];  // enemy sprite sheets by name; the enemies standing in the level
+
+async function loadFighter(s) {
+  const sheet = await fetch(`/assets/characters/${s}/sheet.json`).then(r => r.json());
+  fighter = { slug: s, sheet, img: await load(`/assets/characters/${s}/${sheet.image}`) };
+}
+function nextFighter() {
+  if (!fighters.length) return;
+  fi = (fi + 1) % fighters.length;
+  loadFighter(fighters[fi]);
+}
+
+async function main() {
+  level = await fetch(base + "level.json").then(r => r.json());
+  const names = new Set([level.back.image, level.floor.image, ...level.props.map(p => p.image)]);
+  await Promise.all([...names].map(async n => { imgs[n] = await load(base + n); }));
+  fighters = (await fetch("/api/characters").then(r => r.json())).map(c => c.slug).filter(s => s !== slug);
+  fi = Math.max(0, fighters.indexOf(params.get("f") || "thekoop"));
+  if (fighters.length) await loadFighter(fighters[fi]);
+  await Promise.all((level.enemies || []).filter(e => e.sheet).map(async e => {
+    const sheet = await fetch(base + e.sheet).then(r => r.json());
+    kinds[e.name] = { sheet, img: await load(base + e.sheet.replace(/[^/]+$/, "") + sheet.image) };
+  }));
+  // Each wave's enemies stand spread out past its marker, at different depths.
+  for (const w of level.waves || []) w.enemies.forEach((name, i, all) => foes.push({
+    name, x: w.x + 60 + i * Math.min(30, (level.boss.x - 60 - w.x - 60) / Math.max(1, all.length - 1)), y: level.floor_y + 20 + (i * 23) % (H - level.floor_y - 28),
+    anim: "idle", t: i * 17, hits: 0, facing: -1, next: 40 + i * 25 }));
+  showStory();
+  state.y = level.floor_y + (H - level.floor_y) * 0.5;
+  requestAnimationFrame(frame);
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function showStory() {
+  const s = level.story || {}, el = document.getElementById("story");
+  const counts = {};
+  for (const w of level.waves || []) for (const n of w.enemies) counts[n] = (counts[n] || 0) + 1;
+  el.innerHTML = (s.title ? `<h2>${esc(s.title.toUpperCase())}</h2>` : "") +
+    (s.boss_motive ? `<p class="motive">${esc(s.boss_motive)}</p>` : "") +
+    `<div id="roster">${(level.enemies || []).map(e => `<div><strong>${esc(e.name.toUpperCase())}</strong> ×${counts[e.name] || e.count}<br>
+      ${esc(e.look)}<br><em>${esc(e.personality)}</em> · ${esc(e.fighting_style)}<br>
+      ${e.moves.map(m => "· " + esc(m)).join("<br>")}</div>`).join("")}</div>`;
+  // a standing frame of each enemy that has sprites
+  (level.enemies || []).forEach((e, i) => {
+    const k = kinds[e.name];
+    if (!k) return;
+    const f = k.sheet.animations.idle.frames[0], c = document.createElement("canvas");
+    c.width = f.w; c.height = f.h;
+    c.getContext("2d").drawImage(k.img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    c.style.width = `${f.w * 0.75}px`; c.style.height = `${f.h * 0.75}px`;
+    document.querySelectorAll("#roster > div")[i].prepend(c);
+  });
+}
+
+// Wrap text to a width on the canvas.
+function lines(text, width) {
+  const out = []; let line = "";
+  for (const word of text.split(" ")) {
+    const t = line ? line + " " + word : word;
+    if (ctx.measureText(t).width > width && line) { out.push(line); line = word; } else line = t;
+  }
+  if (line) out.push(line);
+  return out;
+}
+function panel(textLines, y, color = "#fff") {
+  const h = textLines.length * 11 + 10;
+  ctx.fillStyle = "rgba(0,0,0,0.72)"; ctx.fillRect(16, y, W - 32, h);
+  ctx.strokeStyle = "#ffd23f"; ctx.strokeRect(16.5, y + 0.5, W - 33, h - 1);
+  ctx.fillStyle = color;
+  textLines.forEach((l, i) => ctx.fillText(l, 24, y + 15 + i * 11));
+}
+
+function frame() {
+  update(); draw();
+  requestAnimationFrame(frame);
+}
+
+function update() {
+  const L = level, top = L.floor_y + 8, bottom = H - 4;
+  let dx = (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0);
+  const dy = (keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0);
+  if (state.auto && !dx) dx = 1;
+  state.x = Math.max(10, Math.min(L.width - 10, state.x + dx * 1.6));
+  state.y = Math.max(top, Math.min(bottom, state.y + dy * 1.0));  // depth: slower than walking along
+  if (dx) state.facing = dx;
+  state.moving = !!(dx || dy);
+  if (state.auto && state.x >= L.width - 10) state.auto = false;
+  if (state.punch) state.punch--;
+  for (const f of foes) updateFoe(f);
+  state.t++;
+}
+
+const animLen = (k, name) => { const a = k.sheet.animations[name]; return a ? Math.round(a.frames.length * 60 / a.fps) : 0; };
+
+// Enemies just stand their ground in the preview: face the player, attack when close, flinch when hit.
+function updateFoe(f) {
+  const k = kinds[f.name];
+  f.t++;
+  if (!k || f.anim === "ko") return;
+  const dx = state.x - f.x, near = Math.abs(dx) < 70 && Math.abs(state.y - f.y) < 16;
+  if (f.anim !== "idle" && f.t >= Math.max(animLen(k, f.anim), 18)) { f.anim = "idle"; f.t = 0; }
+  if (f.anim === "idle") f.facing = dx < 0 ? -1 : 1;
+  if (f.anim === "idle" && near && --f.next <= 0) {
+    const moves = ["attack1", "attack2", "block"].filter(m => k.sheet.animations[m]);
+    f.anim = moves[Math.floor(Math.random() * moves.length)]; f.t = 0; f.next = 50 + Math.random() * 60;
+  }
+}
+
+function punch() {
+  if (state.punch) return;
+  state.punch = 14;
+  let best = null;
+  for (const f of foes) {
+    const dx = (f.x - state.x) * state.facing;
+    if (f.anim !== "ko" && kinds[f.name] && dx > 0 && dx < 60 && Math.abs(f.y - state.y) < 14 && (!best || dx < (best.x - state.x) * state.facing)) best = f;
+  }
+  if (!best) return;
+  if (best.anim === "block") return;  // blocked
+  best.hits++; best.t = 0;
+  best.anim = best.hits >= 3 ? "ko" : "hit";
+}
+
+function camX() { return Math.max(0, Math.min(level.width - W, Math.round(state.x - W / 2))); }
+
+// One frame of a sprite sheet (a fighter's or an enemy's), feet at (x, y).
+function drawSprite(s, name, t, x, y, facing) {
+  const anims = s.sheet.animations, a = anims[name] || anims.idle;
+  const n = Math.floor(t / (60 / a.fps));
+  const f = a.frames[a.loop ? n % a.frames.length : Math.min(n, a.frames.length - 1)];
+  const px = Math.round(x), py = Math.round(y);
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.beginPath(); ctx.ellipse(px, py + 1, name === "ko" ? 30 : 20, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(px, py); if (facing < 0) ctx.scale(-1, 1);
+  ctx.drawImage(s.img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+  ctx.restore();
+}
+
+// The fighter and the enemies, nearest the bottom of the screen drawn last (in front).
+function drawActors(cx) {
+  const actors = foes.filter(f => kinds[f.name] && f.x - cx > -80 && f.x - cx < W + 80)
+    .map(f => ({ y: f.y, draw: () => drawSprite(kinds[f.name], f.anim, f.t, f.x - cx, f.y, f.facing) }));
+  if (fighter) actors.push({ y: state.y, draw: () => drawSprite(fighter, state.punch ? "punch" : state.moving ? "walk" : "idle",
+    state.punch ? 14 - state.punch : state.t, state.x - cx, state.y, state.facing) });
+  actors.sort((a, b) => a.y - b.y).forEach(a => a.draw());
+}
+
+function draw() {
+  const L = level, cx = camX();
+  // back: sky and buildings, scrolling at its parallax
+  ctx.drawImage(imgs[L.back.image], -Math.round(cx * L.back.parallax), 0);
+  // floor: one tile repeated
+  const fl = imgs[L.floor.image];
+  for (let x = -(cx % fl.width); x < W; x += fl.width) ctx.drawImage(fl, x, L.floor_y);
+  // props behind the fighters (back edge), then the fighter, then props in front (front edge)
+  const prop = p => { const im = imgs[p.image]; ctx.drawImage(im, Math.round(p.x - cx - im.width / 2), p.y - im.height); };
+  for (const p of L.props) if (p.layer === "back") prop(p);
+  drawActors(cx);
+  for (const p of L.props) if (p.layer === "front") prop(p);
+  // waves: where each group of enemies would stop the screen until they're beaten
+  ctx.font = "8px 'Press Start 2P'";
+  for (const wv of level.waves || []) {
+    const x = Math.round(wv.x - cx);
+    if (x < -100 || x > W + 20) continue;
+    ctx.fillStyle = "rgba(255,210,63,0.75)";
+    for (let y = L.floor_y; y < H; y += 6) ctx.fillRect(x, y, 2, 3);
+    const names = {};
+    for (const n of wv.enemies) names[n] = (names[n] || 0) + 1;
+    const label = Object.entries(names).map(([n, k]) => (k > 1 ? k + "× " : "") + n.toUpperCase());
+    ctx.fillStyle = "#ffd23f"; ctx.fillText(`WAVE ${level.waves.indexOf(wv) + 1}`, x + 5, L.floor_y + 12);
+    ctx.fillStyle = "#fff"; label.forEach((t, i) => ctx.fillText(t, x + 5, L.floor_y + 24 + i * 10));
+  }
+  // boss zone marker
+  const bx = L.boss.x - cx;
+  if (bx < W) {
+    ctx.fillStyle = "rgba(255,60,60,0.8)"; ctx.fillRect(Math.round(bx), L.floor_y, 2, H - L.floor_y);
+    ctx.font = "8px 'Press Start 2P'"; ctx.fillStyle = "#fff"; ctx.fillText("BOSS →", Math.round(bx) + 6, L.floor_y + 12);
+  }
+  // the story: the intro until the player gets going, the boss's taunt on arrival
+  const S = level.story || {};
+  ctx.font = "8px 'Press Start 2P'";
+  if (S.intro && state.x < 140) {
+    const t = lines(S.intro, W - 48);
+    panel([...(S.title ? [S.title.toUpperCase(), ""] : []), ...t], 14);
+  }
+  if (S.boss_taunt && state.x > L.boss.x - 40) panel([`${L.character.toUpperCase()}:`, ...lines(`"${S.boss_taunt}"`, W - 48)], 14, "#ffd0d0");
+  if (state.debug) {
+    ctx.strokeStyle = "rgba(255,255,0,0.8)"; ctx.beginPath();
+    ctx.moveTo(0, L.floor_y + 0.5); ctx.lineTo(W, L.floor_y + 0.5);
+    ctx.moveTo(0, L.floor_y + 8.5); ctx.lineTo(W, L.floor_y + 8.5); ctx.stroke();
+  }
+  document.getElementById("info").textContent =
+    `${slug.toUpperCase()} CAMPAIGN · x ${Math.round(state.x)} / ${L.width} · screen ${Math.floor(cx / W) + 1} of ${L.width / W}` +
+    (fighter ? ` · walking: ${fighter.slug}` : "");
+}
+
+main().catch(e => { document.getElementById("info").textContent = `Could not load the level: ${e.message}`; });
+</script>
+</body>
+</html>

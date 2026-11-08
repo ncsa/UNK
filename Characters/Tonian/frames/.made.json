@@ -26,9 +26,19 @@
  "special1_1": "1bc9f11d154d",
  "special2_0": "bbccf441a677",
  "special2_1": "9207fc4a4e9f",
+ "special3_0": "eb218f7d23f6",
+ "special3_1": "715989a3ce96",
  "uppercut_0": "183d85cdbd01",
  "uppercut_1": "bef0a38f6e10",
  "victory_0": "7f88bd8d9378",
- "walk_0": "de8281521cff",
- "walk_1": "f1f9b0f5cae5"
+ "walk_0": "strip",
+ "walk_1": "strip",
+ "walk_2": "strip",
+ "walk_3": "strip",
+ "walk_4": "strip",
+ "walk_5": "strip",
+ "walk_6": "strip",
+ "walk_7": "strip",
+ "walk_strip": "ad626d5be048",
+ "walk_strip_drawn": "ad626d5be048"
 }

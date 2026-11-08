@@ -1,0 +1,203 @@
+{
+ "character": "chuckt",
+ "width": 2304,
+ "height": 224,
+ "floor_y": 150,
+ "story": {
+  "title": "Fiscal Lockdown",
+  "boss_motive": "ChuckT has declared the College of Engineering fiscally non-compliant, freezing research budgets and seizing coffee machines until decades of paperwork are re-filed.",
+  "intro": "It's 4:30 PM and your research grant deadline is at 5:00 PM. ChuckT has locked down Engineering Hall and barricaded the dean inside! Fight your way across the audit-strewn campus quad to get your form signed in time.",
+  "boss_taunt": "Your budget request is REJECTED! Time for your final audit!",
+  "outro": "ChuckT drops his calculator in defeat, and the grant gets signed with two minutes to spare. Coffee machines across campus begin brewing once again."
+ },
+ "back": {
+  "image": "back.png",
+  "parallax": 0.6
+ },
+ "floor": {
+  "image": "floor.png"
+ },
+ "props": [
+  {
+   "image": "props/boxes.png",
+   "x": 787,
+   "y": 153,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/boxes.png",
+   "x": 1480,
+   "y": 153,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 261,
+   "y": 154,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/cabinet.png",
+   "x": 1137,
+   "y": 154,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 1398,
+   "y": 155,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 1689,
+   "y": 156,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/cabinet.png",
+   "x": 1552,
+   "y": 156,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 567,
+   "y": 157,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/lamppost.png",
+   "x": 976,
+   "y": 157,
+   "layer": "back",
+   "breakable": false
+  },
+  {
+   "image": "props/cabinet.png",
+   "x": 634,
+   "y": 157,
+   "layer": "back",
+   "breakable": true
+  },
+  {
+   "image": "props/shredder.png",
+   "x": 444,
+   "y": 238,
+   "layer": "front",
+   "breakable": true
+  }
+ ],
+ "enemies": [
+  {
+   "name": "Audit Intern",
+   "look": "A twitchy youngster wearing an oversized navy blue blazer, khaki pants, and a thick blue lanyard swinging around their neck.",
+   "personality": "Panicked and overworked",
+   "fighting_style": "Switches quickly between frantic wild clipboard swings and throwing loose paper.",
+   "moves": [
+    "Clipboard Smack: Swings a hard wooden clipboard in a quick horizontal arc.",
+    "Form Toss: Flings a stack of printed budget sheets forward like throwing stars."
+   ],
+   "count": 5,
+   "sheet": "enemies/audit_intern/sheet.json"
+  },
+  {
+   "name": "Compliance Officer",
+   "look": "A tall, imposing figure in a neat gray business suit wearing dark aviator sunglasses.",
+   "personality": "Strict and bureaucratic",
+   "fighting_style": "Defensive posture with powerful front-facing counter-attacks.",
+   "moves": [
+    "Denied Stamp: Slam-dunks a massive red hand stamp directly onto the player's head.",
+    "Red Tape Block: Holds up a heavy briefcase to block incoming attacks."
+   ],
+   "count": 3,
+   "sheet": "enemies/compliance_officer/sheet.json"
+  },
+  {
+   "name": "Shredder Bot",
+   "look": "A boxy grey motorized unit on small rubber wheels with visible gears and sharp rotating blades in its top slot.",
+   "personality": "Mindless and aggressive",
+   "fighting_style": "Drives rapidly back and forth across the ground, attacking low.",
+   "moves": [
+    "Confetti Spray: Fires a high-velocity burst of sharp paper shreds directly ahead.",
+    "Ankle Grind: Charges forward at high speed aiming to run over toes."
+   ],
+   "count": 2,
+   "sheet": "enemies/shredder_bot/sheet.json"
+  },
+  {
+   "name": "Expense Report Golem",
+   "look": "A bulky eight-foot humanoid constructed entirely out of compressed white receipts, blue binder clips, and manila folders.",
+   "personality": "Unstoppable and dense",
+   "fighting_style": "Slow lumbering movements with immense crushing physical strikes.",
+   "moves": [
+    "Receipt Slam: Double-axe handles both hands downward onto the ground.",
+    "Binder Clip Pinch: Reaches out with massive metallic clips to grab and crush."
+   ],
+   "count": 1,
+   "sheet": "enemies/expense_report_golem/sheet.json"
+  }
+ ],
+ "waves": [
+  {
+   "x": 614,
+   "screen": 2,
+   "enemies": [
+    "Audit Intern",
+    "Audit Intern"
+   ]
+  },
+  {
+   "x": 998,
+   "screen": 3,
+   "enemies": [
+    "Audit Intern",
+    "Audit Intern"
+   ]
+  },
+  {
+   "x": 1382,
+   "screen": 4,
+   "enemies": [
+    "Audit Intern",
+    "Compliance Officer",
+    "Compliance Officer"
+   ]
+  },
+  {
+   "x": 1766,
+   "screen": 5,
+   "enemies": [
+    "Compliance Officer",
+    "Shredder Bot",
+    "Shredder Bot",
+    "Expense Report Golem"
+   ]
+  }
+ ],
+ "boss": {
+  "x": 1920,
+  "arena": "chuckt_home",
+  "view": {
+   "x": 148.61,
+   "y": 39.23,
+   "scale": 0.613,
+   "width": 384
+  }
+ },
+ "mini_boss": {
+  "character": "thekoop",
+  "name": "The Koop",
+  "after_wave": 2,
+  "x": 1230,
+  "arena": "thekoop_home"
+ }
+}

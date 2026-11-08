@@ -50,6 +50,9 @@ const BLAST = { thickness: 16, papers: 14 };
 const FLURRY = { startup: 10, active: 54, recovery: 14, every: 6, hits: 8, damage: 1.3, creep: 0.7 };
 // Flip: crouch, then a rising backflip kick that launches; the sprite turns a full circle in the air.
 const FLIP = { startup: 12, vy: 7.6, vx: 0.5, hitFor: 0.6 };
+// Hurricane: a hop, then spinning like a top with a leg out, travelling forward through the air and
+// kicking whoever it passes several times; lands where it ends up.
+const HURRICANE = { startup: 10, air: 46, height: 26, speed: 2.6, every: 8, hits: 4, damage: 1.4 };
 // Audit: tap away at a calculator, then a fan of red figures sprays across the screen (block it).
 // If it reaches the opponent their money bursts out of their pockets and whirls around them for
 // `whirl` ticks, hitting them `whirlHits` times (unblockable), before it blows away.
@@ -57,7 +60,8 @@ const FLIP = { startup: 12, vy: 7.6, vx: 0.5, hitFor: 0.6 };
 // Orbital: call down a strike from the sky. A target reticle follows the opponent (slower than they
 // can run, so it can be outrun) for `track` ticks, locks for `lock`, then a giant beam hits that spot.
 // damage: x special_damage; unblockable, but dodgeable by getting out from under it.
-const ORBITAL = { startup: 18, track: 44, follow: 1.9, lock: 24, strike: 40, hitFor: 14, width: 54, damage: 2.2, recovery: 16 };
+const ORBITAL = { startup: 18, track: 44, follow: 1.9, lock: 24, strike: 40, hitFor: 14, width: 54, damage: 2.2, recovery: 16,
+                  fall: 9, propScale: 0.7 };  // a dropped prop: ticks to fall from the sky, and its size
 const AUDIT = { startup: 20, speed: 7, hold: 30, recovery: 16, cash: 46, sprayDamage: 0.5,
                 whirl: 150, whirlHits: 5, whirlDamage: 0.25 };
 
@@ -90,6 +94,28 @@ async function loadCharacter(summary) {
 }
 
 // ---------------------------------------------------------------- fighter
+
+// A sprite frame's main color (its most common opaque, not-too-light color, roughly), for effects
+// drawn in a fighter's own colors.
+function dominantColor(img, f) {
+  const c = document.createElement("canvas"); c.width = f.w; c.height = f.h;
+  const g = c.getContext("2d"); g.drawImage(img, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+  const px = g.getImageData(0, 0, f.w, f.h).data, bins = new Map();
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] < 200) continue;
+    const r = px[i], gg = px[i + 1], b = px[i + 2];
+    if (r + gg + b > 600) continue;  // whites: the crescent's core is white already
+    const key = (r >> 5) << 6 | (gg >> 5) << 3 | (b >> 5);
+    const e = bins.get(key) || [0, 0, 0, 0];
+    e[0] += r; e[1] += gg; e[2] += b; e[3]++; bins.set(key, e);
+  }
+  const best = [...bins.values()].sort((p, q) => q[3] - p[3])[0];
+  if (!best) return [120, 200, 255];
+  const [r, gg, b, n] = best;
+  // lift very dark colors a little so a black outfit still reads as a colored edge
+  const lift = v => Math.round(Math.min(255, v / n * 0.8 + 40));
+  return [lift(r), lift(gg), lift(b)];
+}
 
 class Fighter {
   constructor(char, isPlayer) {
@@ -202,6 +228,8 @@ class Fighter {
     } else {
       anim = this.anim(s);
       if (anim.loop) i = Math.floor(this.t / (60 / anim.fps));
+      // Backing away: the walk cycle runs backwards, so the feet step back instead of moonwalking.
+      if (s === "walk" && this.holdingBack) i = anim.frames.length - 1 - (i % anim.frames.length);
     }
     return anim.frames[i % anim.frames.length];
   }
@@ -673,6 +701,31 @@ class Fighter {
       }
       return;
     }
+    if (sp.effect === "hurricane") {
+      const k = t - HURRICANE.startup;
+      if (k < 0) { this.vx = 0; return; }
+      if (k < HURRICANE.air) {
+        // held aloft on a smooth arc (no gravity), moving forward
+        this.floating = true; this.vy = 0;
+        this.y = Math.max(0.01, HURRICANE.height * Math.sin(Math.PI * Math.min(1, (k + 4) / (HURRICANE.air + 4))));
+        this.vx = this.facing * HURRICANE.speed;
+        if (k % HURRICANE.every === 0) {
+          sfx("kick_whoosh", { x: this.x });
+          if (this.hitCount < HURRICANE.hits && overlap(this.worldBox([-34, -120, 92, 90]), opp.hurtBox())) {
+            this.hitCount++;
+            const last = this.hitCount === HURRICANE.hits;
+            opp.receive(this, Math.max(1, Math.round(dmg * HURRICANE.damage / HURRICANE.hits)), match,
+                        last ? { hitstun: 26, push: 5, launch: 4 } : { hitstun: 14, push: 1.5 });
+          }
+        }
+        return;
+      }
+      this.floating = false; this.y = 0; this.vy = 0; this.vx = 0;
+      this.facing = opp.x >= this.x ? 1 : -1;
+      sfx("land", { x: this.x });
+      this.setState("idle");
+      return;
+    }
     if (sp.effect === "flurry") {
       const k = t - FLURRY.startup;
       if (k >= 0 && k < FLURRY.active) {
@@ -808,6 +861,31 @@ class Fighter {
     }
   }
 
+  // Spinning like a top: the airborne frame turns side to side (mirrored every few ticks, as old
+  // sprites did it), squeezed narrow as it passes edge-on, with swirling arcs round the kicking leg.
+  drawHurricane(ctx, f, img, px, py) {
+    const k = this.t - HURRICANE.startup, turn = (k / 10) * Math.PI * 2;  // a full turn every 10 ticks
+    const sx = Math.cos(turn), cy = py - Math.round(f.h * 0.55);
+    ctx.save();
+    // swirl: flattened ellipses round the body at leg height, the near half drawn over the sprite after
+    const swirl = front => {
+      for (const [r, a] of [[46, 0.5], [38, 0.8]]) {
+        ctx.strokeStyle = `rgba(235,248,255,${a})`; ctx.lineWidth = 2;
+        ctx.beginPath();
+        const start = turn % (Math.PI * 2);
+        ctx.ellipse(px, cy + 4, r, 9, 0, front ? start : start + Math.PI, (front ? start : start + Math.PI) + Math.PI * 0.8);
+        ctx.stroke();
+      }
+    };
+    swirl(false);
+    ctx.translate(px, py);
+    ctx.scale((Math.abs(sx) < 0.25 ? 0.25 : Math.abs(sx)) * (sx >= 0 ? 1 : -1) * this.facing, 1);
+    ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
+    ctx.restore();
+    ctx.save(); swirl(true); ctx.restore();
+    if (this.shout) drawBubble(ctx, this.shout.text, px, py - f.h - 8);
+  }
+
   // How far through a flip special's backflip this fighter is (0..1), or null when not flipping.
   flipProgress() {
     if (!(this.special?.effect === "flip" && this.state === this.special.id)) return null;
@@ -825,17 +903,53 @@ class Fighter {
     ctx.save();
     ctx.translate(px, cy);
     if (this.facing < 0) ctx.scale(-1, 1);
-    if (p < 0.85) {
-      const from = Math.max(0, p - 0.4);
-      for (const [w, color] of [[9, "rgba(120,200,255,0.35)"], [4, "rgba(230,248,255,0.85)"]]) {
-        ctx.strokeStyle = color; ctx.lineWidth = w; ctx.lineCap = "round";
-        ctx.beginPath(); ctx.arc(0, 0, R, feet(p), feet(from)); ctx.stroke();
-      }
-    }
+    // The crescent the feet sweep in front of the body, from below through the front to overhead:
+    // widest in the middle, a white core, an edge in the fighter's own colors frayed into streaks.
+    // It stays drawn after the feet pass the top, then fades.
+    const swept = Math.min(p, 0.55), fade = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.3);
+    if (swept > 0.02 && fade > 0) this.drawCrescent(ctx, R + 6, feet(swept), feet(Math.max(0, swept - 0.5)), fade, f, img);
     ctx.rotate(rot(p));
     ctx.drawImage(img, f.x, f.y, f.w, f.h, -Math.round(f.w / 2), -Math.round(f.h / 2), f.w, f.h);
     ctx.restore();
     if (this.shout) drawBubble(ctx, this.shout.text, px, cy - R - 8);
+  }
+
+  // A crescent along a circle of radius R from angle a0 back to a1 (a0 < a1: drawn going backwards),
+  // thickest in the middle. Its rim takes the fighter's main color from the flip frame (f).
+  drawCrescent(ctx, R, a0, a1, alpha, f, img) {
+    const rim = this.char.flipColor ??= dominantColor(img, f);
+    const N = 28, pts = (width, bias) => {
+      const outer = [], inner = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N, a = a0 + (a1 - a0) * u, w = width * Math.sin(Math.PI * Math.min(1, u * 1.15));
+        outer.push([Math.cos(a) * (R + w * (0.5 + bias)), Math.sin(a) * (R + w * (0.5 + bias))]);
+        inner.push([Math.cos(a) * (R - w * (0.5 - bias)), Math.sin(a) * (R - w * (0.5 - bias))]);
+      }
+      return [...outer, ...inner.reverse()];
+    };
+    const fill = (poly, color) => {
+      ctx.fillStyle = color; ctx.beginPath();
+      poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath(); ctx.fill();
+    };
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const mid = rim.map(v => Math.round(v + (255 - v) * 0.55));
+    fill(pts(30, 0.15), `rgba(${rim[0]},${rim[1]},${rim[2]},0.95)`);  // the colored rim
+    fill(pts(23, 0.1), `rgba(${mid[0]},${mid[1]},${mid[2]},0.95)`);   // a lighter band
+    fill(pts(15, 0.05), "rgba(255,255,255,0.97)");                    // the white core
+    // frayed streaks off the outer edge, fixed per angle so they don't flicker
+    ctx.strokeStyle = `rgba(${rim[0]},${rim[1]},${rim[2]},0.9)`; ctx.lineWidth = 1.5;
+    for (let i = 1; i < N; i += 1) {
+      const u = i / N, a = a0 + (a1 - a0) * u, w = 30 * Math.sin(Math.PI * Math.min(1, u * 1.15));
+      const r0 = R + w * 0.6, len = 3 + ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1 * 10 * (w / 30);
+      const da = 0.06 * (a1 > a0 ? 1 : -1);  // swept back along the arc, like a brushstroke's tail
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+      ctx.lineTo(Math.cos(a + da) * (r0 + len), Math.sin(a + da) * (r0 + len));
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // Speed lines across the kicking zone while the flurry is on.
@@ -862,7 +976,7 @@ class Fighter {
     ctx.ellipse(px, GROUND + 1, Math.max(10, 22 - this.y / 6), 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (this.floating) {  // soft glow and rising motes under a hovering fighter
+    if (this.floating && this.special?.effect !== "hurricane") {  // soft glow and rising motes under a hovering fighter
       ctx.fillStyle = `rgba(190,230,255,${0.18 + Math.sin(this.t * 0.15) * 0.06})`;
       ctx.beginPath(); ctx.ellipse(px, py + 4, 26, 7, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "rgba(220,245,255,0.8)";
@@ -885,6 +999,9 @@ class Fighter {
 
     const flipP = this.flipProgress();
     if (flipP !== null) return this.drawFlip(ctx, f, img, px, py, flipP);
+    if (this.special?.effect === "hurricane" && this.state === this.special.id && this.t >= HURRICANE.startup) {
+      return this.drawHurricane(ctx, f, img, px, py);
+    }
 
     ctx.save();
     ctx.translate(px, py);
@@ -1011,6 +1128,14 @@ function drawBubble(ctx, text, x, bottom) {
 const ARROW_KEYS = { ArrowUp: "w", ArrowLeft: "a", ArrowDown: "s", ArrowRight: "d" };
 const keyName = e => ARROW_KEYS[e.key] || e.key.toLowerCase();
 
+// Two opposite directions held at once: the one pressed last wins, rather than cancelling out. With
+// cancelling, a key whose release the browser never delivered (or a controller stick reading as
+// pushed) left the player stuck: the opposite direction just added up to standing still.
+function axis(keys, pos, neg, last) {
+  const p = keys.has(pos), n = keys.has(neg);
+  return p && n ? (last === neg ? -1 : 1) : (p ? 1 : 0) - (n ? 1 : 0);
+}
+
 class PlayerInput {
   constructor() {
     this.keys = new Set();
@@ -1026,6 +1151,7 @@ class PlayerInput {
       }
       if (!"wasd".includes(k)) return;
       if (!e.repeat) this.push(this.relative(k.toUpperCase()));
+      if (!e.repeat && (k === "a" || k === "d")) this.lastH = k;
       this.keys.add(k);
     };
     this.onKeyUp = e => this.keys.delete(keyName(e));
@@ -1110,7 +1236,7 @@ class PlayerInput {
 
   read() {
     const k = this.keys;
-    const input = { move: (k.has("d") ? 1 : 0) - (k.has("a") ? 1 : 0), jump: k.has("w"), crouch: k.has("s") };
+    const input = { move: axis(k, "d", "a", this.lastH), jump: k.has("w"), crouch: k.has("s") };
     if (this.pending && performance.now() > this.pending.expires) this.pending = null;
     return input;
   }
@@ -1187,7 +1313,7 @@ class AI {
 
     const specials = f.char.specials.filter(s => f.specialReady(s));
     const ranged = specials.filter(s => ["projectile", "beam", "audit", "orbital", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport"].includes(s.effect));
-    const close = specials.filter(s => ["melee", "flurry", "flip", "uppercut", "orbital", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
+    const close = specials.filter(s => ["melee", "flurry", "flip", "hurricane", "uppercut", "orbital", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
     const think = Math.round(rand(6, 22) * (1.3 - tr.aggression) * this.lv.think);
     let action;
     if (dist > 70) {
@@ -1291,8 +1417,42 @@ const music = {
 
 // ---------------------------------------------------------------- match
 
+// A fighter's sprite sheet recolored for a mirror match, the way old fighting games gave the second
+// player another palette: clothes and everything else swing round the color wheel, while skin and
+// hair tones (reds through yellow-browns) stay as they are. Cached on the character.
+function mirrorColors(char) {
+  if (char.mirrorImg) return char.mirrorImg;
+  const src = char.img, c = document.createElement("canvas");
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext("2d");
+  ctx.drawImage(src, 0, 0);
+  const data = ctx.getImageData(0, 0, c.width, c.height), px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    if (!px[i + 3]) continue;
+    const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+    if (d < 0.04) {  // greys, black and white: a little darker and warmer, so a grey suit still changes
+      px[i] = Math.min(255, px[i] * 0.95 + 14); px[i + 1] *= 0.82; px[i + 2] *= 0.82;
+      continue;
+    }
+    const sat = d / (1 - Math.abs(2 * l - 1));
+    let hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    hue = (hue * 60 + 360) % 360;
+    if (hue < 50 && r > b) continue;  // skin, hair, wood: keep
+    hue = (hue + 150) % 360;
+    const k = n => { const a = (n + hue / 30) % 12; return l - sat * Math.min(l, 1 - l) * Math.max(-1, Math.min(a - 3, 9 - a, 1)); };
+    px[i] = k(0) * 255; px[i + 1] = k(8) * 255; px[i + 2] = k(4) * 255;
+  }
+  ctx.putImageData(data, 0, 0);
+  return (char.mirrorImg = c);
+}
+
 class Match {
-  constructor({ player, opponent, arena, arenaImg, onEnd, difficulty = "easy" }) {
+  // rounds: rounds to win the match; 1 for a campaign's mini boss (a draw is fought again).
+  // From a campaign street (static/brawl.js), the first round can also start where the two walked
+  // to (starts: [player x, opponent x] on the stage) and with the player's health from the street.
+  constructor({ player, opponent, arena, arenaImg, onEnd, difficulty = "easy", rounds = ROUNDS_TO_WIN,
+                starts = null, health = null }) {
     this.canvas = $("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
@@ -1302,6 +1462,9 @@ class Match {
     // black space fighters could walk into.
     this.arenaW = Math.max(W, arenaImg.width);
     this.stageWidth = this.arenaW;
+    // A mirror match (a campaign mini boss who is the player's own fighter): the opponent wears
+    // other colors, so you can tell them apart.
+    if (opponent.slug === player.slug) opponent = { ...opponent, img: mirrorColors(opponent) };
     this.p1 = new Fighter(player, true);
     this.p2 = new Fighter(opponent, false);
     const lv = DIFFICULTY[difficulty] || DIFFICULTY.easy;
@@ -1313,6 +1476,8 @@ class Match {
     this.input = new PlayerInput();
     this.ai = new AI(this.p2, difficulty);
     this.onEnd = onEnd;
+    this.roundsToWin = rounds;
+    this.starts = starts; this.startHealth = health;
     this.round = 0;
     this.totalTicks = 0;
     this.debug = false;
@@ -1347,9 +1512,12 @@ class Match {
 
   nextRound() {
     this.round++;
-    const mid = this.stageWidth / 2;
-    this.p1.reset(mid - 70, 1);
-    this.p2.reset(mid + 70, -1);
+    const mid = this.stageWidth / 2, [x1, x2] = this.round === 1 && this.starts || [mid - 70, mid + 70];
+    this.p1.reset(x1, 1);
+    this.p2.reset(x2, -1);
+    if (this.round === 1 && this.startHealth != null) {  // no healing on the way in
+      this.p1.health = this.p1.trail = clamp(this.startHealth, 1, this.p1.stats.health);
+    }
     this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.tapes = []; this.slideshows = []; this.rains = []; this.audits = []; this.orbitals = [];
     this.stars = []; this.breakerBanner = null; this.flash = 0;
     this.phase = "intro"; this.phaseT = 0;
@@ -1430,10 +1598,12 @@ class Match {
 
     switch (this.phase) {
       case "intro":
-        this.banner = this.phaseT < 80 ? `ROUND ${this.round}` : "FIGHT!";
+        // A one-round fight (a campaign's mini boss) is just a fight: no round number, no round call.
+        const single = this.roundsToWin === 1;
+        this.banner = this.phaseT < 80 ? (single ? "GET READY" : `ROUND ${this.round}`) : "FIGHT!";
         if (this.phaseT === 1) sfx("round");
-        if (this.phaseT === 20) sfx(this.round === MAX_ROUNDS || (this.p1.rounds === ROUNDS_TO_WIN - 1 &&
-          this.p2.rounds === ROUNDS_TO_WIN - 1) ? "vo_final_round" : `vo_round_${this.round}`);
+        if (this.phaseT === 20 && !single) sfx(this.round === MAX_ROUNDS || (this.p1.rounds === this.roundsToWin - 1 &&
+          this.p2.rounds === this.roundsToWin - 1) ? "vo_final_round" : `vo_round_${this.round}`);
         if (this.phaseT === 80) { sfx("fight"); sfx("vo_fight"); }
         if (this.phaseT >= 120) { this.phase = "fight"; this.banner = null; }
         break;
@@ -1457,7 +1627,7 @@ class Match {
         }
         if (this.phaseT === 150 && this.banner === "PERFECT") sfx("vo_perfect");
         if (this.phaseT >= 210) {
-          const done = this.p1.rounds >= ROUNDS_TO_WIN || this.p2.rounds >= ROUNDS_TO_WIN || this.round >= MAX_ROUNDS;
+          const done = this.p1.rounds >= this.roundsToWin || this.p2.rounds >= this.roundsToWin || this.round >= MAX_ROUNDS;
           if (done) this.finish(false); else this.nextRound();
         }
         break;
@@ -1852,7 +2022,9 @@ class Match {
 
   // Orbital specials: see ORBITAL.
   spawnOrbital(owner, target) {
-    this.orbitals.push({ owner, target, x: target.x, phase: "track", t: 0, hit: false });
+    // With a prop (MJ's hippo), the prop drops out of the sky onto the target instead of a beam.
+    const img = owner.special && owner.char.props?.[owner.special.id] || null;
+    this.orbitals.push({ owner, target, x: target.x, phase: "track", t: 0, hit: false, img });
   }
 
   updateOrbitals() {
@@ -1866,12 +2038,13 @@ class Match {
         if (o.t % 4 === 0) sfx("tick", { x: o.x });
         if (o.t >= ORBITAL.lock) {
           o.phase = "strike"; o.t = 0;
-          sfx("special", { x: o.x }); sfx("slam", { x: o.x });
-          this.shake = 16; this.flash = 10;
+          if (o.img) sfx("throw", { x: o.x });  // the prop whistles down; it lands at ORBITAL.fall
+          else { sfx("special", { x: o.x }); sfx("slam", { x: o.x }); this.shake = 16; this.flash = 10; }
         }
       } else if (o.phase === "strike") {
-        const target = o.target;
-        if (!o.hit && o.t <= ORBITAL.hitFor && this.phase === "fight" && target.state !== "ko") {
+        const target = o.target, landed = !o.img || o.t >= ORBITAL.fall;
+        if (o.img && o.t === ORBITAL.fall) { sfx("slam", { x: o.x }); sfx("hit_heavy", { x: o.x }); this.shake = 16; }
+        if (landed && !o.hit && o.t <= ORBITAL.hitFor + (o.img ? ORBITAL.fall : 0) && this.phase === "fight" && target.state !== "ko") {
           const hb = target.hurtBox(), half = ORBITAL.width / 2;
           if (hb.x < o.x + half && hb.x + hb.w > o.x - half) {
             o.hit = true;
@@ -1879,7 +2052,7 @@ class Match {
                            { hitstun: 40, push: 3, launch: 6, unblockable: true });
           }
         }
-        if (o.t % 3 === 0 && o.t < ORBITAL.strike - 8) this.spark(o.x + rand(-20, 20), GROUND - rand(0, 24), false);
+        if (landed && o.t % 3 === 0 && o.t < ORBITAL.strike - 8) this.spark(o.x + rand(-20, 20), GROUND - rand(0, 24), false);
         if (o.t >= ORBITAL.strike) o.done = true;
       }
     }
@@ -1905,6 +2078,21 @@ class Match {
         // a thin targeting laser from the sky
         ctx.fillStyle = `rgba(255,60,60,${locked ? 0.55 : 0.25 + (o.t % 10 < 5 ? 0.1 : 0)})`;
         ctx.fillRect(x, 0, 1, GROUND - 2);
+      }
+      if (layer === "beam" && o.phase === "strike" && o.img) {  // the prop drops, lands, settles
+        const k = o.t, s = ORBITAL.propScale, w = Math.round(o.img.width * s), h = Math.round(o.img.height * s);
+        const fall = Math.min(1, k / ORBITAL.fall);
+        const squash = k >= ORBITAL.fall ? Math.max(0, 1 - (k - ORBITAL.fall) / 8) * 0.18 : 0;  // a thud
+        const hh = Math.round(h * (1 - squash)), ww = Math.round(w * (1 + squash));
+        const bottom = Math.round(-20 + (GROUND + 4 + 20) * fall * fall);
+        ctx.globalAlpha = Math.min(1, (ORBITAL.strike - k) / 10);
+        if (k >= ORBITAL.fall) {  // dust where it hit
+          ctx.fillStyle = "rgba(230,220,200,0.7)";
+          ctx.beginPath(); ctx.ellipse(x, GROUND + 2, ww * 0.6 + (k - ORBITAL.fall) * 2, 7, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.drawImage(o.img, x - Math.round(ww / 2), bottom - hh, ww, hh);
+        ctx.globalAlpha = 1;
+        continue;
       }
       if (layer === "beam" && o.phase === "strike") {
         const k = o.t;
@@ -2304,7 +2492,7 @@ function outlinedText(ctx, text, x, y, color, width = 2) {
 
 // ---------------------------------------------------------------- menus
 
-const app = { characters: [], arenas: [], me: null, choice: { player: null, opponent: "random" }, loaded: {} };
+const app = { characters: [], arenas: [], campaigns: [], me: null, choice: { player: null, opponent: "random" }, loaded: {} };
 
 // The character select screen, with SelectionScreen.mp3 looping (M toggles it there too).
 const SELECTION_MUSIC = "/assets/selection-music";
@@ -2376,6 +2564,7 @@ function select(group, value) {
   }
   if (group === "opponent") showArenaPreview(value);
   $("fight-btn").disabled = !(app.choice.player && app.arenas.length && app.characters.length > 1);
+  showCampaignButton();
 }
 
 // The opponent's home arena (an Arena_* image in their Characters/ folder), else a random
@@ -2388,6 +2577,22 @@ function arenaFor(slug) {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   const generic = app.arenas.filter(a => !a.home);
   return homeArena(slug) || pick(generic.length ? generic : app.arenas);
+}
+
+// The opponent's campaign (static/brawl.js), if they have one: a street of enemies, then them as
+// the boss. Offered as a second button under FIGHT!; never your own (you'd be its boss).
+function currentCampaign() {
+  const { player, opponent } = app.choice;
+  return opponent !== player && app.campaigns.find(c => c.boss === opponent) || null;
+}
+
+function showCampaignButton() {
+  const c = currentCampaign(), btn = $("campaign-btn");
+  btn.hidden = !c;
+  if (!c) return;
+  btn.innerHTML = `CAMPAIGN<small>${esc(c.title.toUpperCase())}</small>`;
+  btn.title = `Fight through ${c.enemies} enemies, then ${c.boss_name}`;
+  btn.disabled = $("fight-btn").disabled;
 }
 
 // Small card beside FIGHT! showing where the match will be fought.
@@ -2430,8 +2635,11 @@ async function refreshScores() {
 }
 
 async function initMenu() {
-  [app.me, app.characters, app.arenas] = await Promise.all(
-    ["/api/me", "/api/characters", "/api/arenas"].map(getJSON));
+  [app.me, app.characters, app.arenas, app.campaigns] = await Promise.all(
+    ["/api/me", "/api/characters", "/api/arenas", "/api/campaigns"].map(u => getJSON(u).catch(e => {
+      if (u === "/api/campaigns") return [];  // campaigns are optional
+      throw e;
+    })));
   $("user").textContent = `${app.me.username.toUpperCase()} · BEST ${app.me.best}`;
   $("pw-btn").hidden = !app.me.can_change_password;
   $("acct-btn").hidden = !app.me.can_request_account;
@@ -2464,14 +2672,7 @@ async function initMenu() {
   randomCard.innerHTML = `<div class="portrait unknown">?</div><span class="name">RANDOM</span>
     <span class="meta">${unknownBar("HP")}${unknownBar("ATK")}${unknownBar("DEF")}</span>`;
   randomCard.onclick = () => { select("opponent", "random"); sfx("menu_move"); };
-  // Campaign mode: not built yet, so a stamped, unselectable placeholder (the grid keeps it card height).
-  const campaignCard = document.createElement("button");
-  campaignCard.className = "card soon"; campaignCard.dataset.value = "campaign";
-  campaignCard.setAttribute("aria-disabled", "true"); campaignCard.title = "Campaign mode is coming soon";
-  campaignCard.innerHTML = `<div class="portrait campaign"></div><span class="name">CAMPAIGN</span>
-    <span class="stamp">COMING<br>SOON</span>`;
-  campaignCard.onclick = () => sfx("menu_move");
-  if (rivals.length) og.append(randomCard, campaignCard);
+  if (rivals.length) og.append(randomCard);
   else og.innerHTML = `<p class="empty">No one to fight yet. Build another character with add_character.py.</p>`;
 
   select("opponent", "random");
@@ -2573,17 +2774,25 @@ document.querySelectorAll("#initials .slot").forEach((el, i) => {
 });
 $("initials-ok").onclick = saveInitials;
 
-async function endMatch(result, pc, oc) {
+// run: set for a campaign (static/brawl.js): how the street went; result is the boss match, or a
+// stand-in for it when the player was knocked out on the street.
+async function endMatch(result, pc, oc, run = null) {
   app.match = null;
   if (result.quit) { showMenu(); return; }
   closeInitials();
   show("results");
-  $("result-title").textContent = result.won ? "YOU WIN!" : "YOU LOSE";
+  const combos = result.combos;  // the boss match's; street combos aren't scored (static/brawl.js)
+  $("result-title").textContent = !run ? (result.won ? "YOU WIN!" : "YOU LOSE")
+    : result.won ? "CAMPAIGN CLEAR!" : "GAME OVER";
   $("result-title").style.color = result.won ? "var(--gold)" : "var(--red)";
   $("result-score").textContent = "...";
-  const best = Math.max(0, ...result.combos);
-  $("result-detail").textContent = `${pc.name} vs ${oc.name} (${DIFFICULTY[app.lastMatch.difficulty].label})` +
-    ` · rounds ${result.rounds.join("-")} · ${result.duration}s` +
+  const best = Math.max(0, ...combos);
+  $("result-detail").textContent = (run
+    ? `${run.story.title || "Campaign"} (${DIFFICULTY[app.lastMatch.difficulty].label}) · ${run.enemies} enemies beaten` +
+      ` · street ${run.street_seconds}s` + (run.mini_boss ? ` · beat ${run.mini_name}` : "") +
+      (run.cleared ? ` · vs ${oc.name}: rounds ${result.rounds.join("-")}` : "")
+    : `${pc.name} vs ${oc.name} (${DIFFICULTY[app.lastMatch.difficulty].label})` +
+      ` · rounds ${result.rounds.join("-")} · ${result.duration}s`) +
     (best ? ` · best combo ${best} hits` : "") +
     (result.breakers ? ` · ${result.breakers} combo breaker${result.breakers > 1 ? "s" : ""}` : "");
   try {
@@ -2592,7 +2801,9 @@ async function endMatch(result, pc, oc) {
       body: JSON.stringify({ ...app.lastMatch, character: app.lastMatch.player, won: result.won,
                              health_left: result.health_left, duration: result.duration,
                              round_health: result.round_health, specials_landed: result.specials_landed,
-                             combos: result.combos, breakers: result.breakers }),
+                             combos, breakers: result.breakers,
+                             campaign: run ? { enemies: run.enemies, street_seconds: run.street_seconds,
+                                               cleared: run.cleared, mini_boss: !!run.mini_boss } : null }),
     }).then(r => r.json());
     $("result-score").textContent = r.score !== undefined ? `${r.score} PTS` : "NO SCORE";
     if (r.id !== undefined && app.me.choose_any) openInitials(r.id);
@@ -2604,10 +2815,12 @@ async function endMatch(result, pc, oc) {
   } catch {
     $("result-score").textContent = "SCORE NOT SAVED";
   }
+  if (run && result.won && run.story.outro) $("result-detail").textContent += `\n\n${run.story.outro}`;
   refreshScores();
 }
 
 $("fight-btn").onclick = () => { sfx("menu_select"); startMatch(); };
+$("campaign-btn").onclick = () => { sfx("menu_select"); if (currentCampaign()) startCampaign(currentCampaign()); };
 
 // Difficulty picker on the selection screen; remembered per browser.
 function setDifficulty(level) {
@@ -2620,6 +2833,7 @@ setDifficulty((() => { try { return localStorage.getItem("unk.difficulty"); } ca
 $("rematch-btn").onclick = () => {
   sfx("menu_select");
   closeInitials();
+  if (app.lastMatch.campaign) { startCampaign(app.lastMatch.campaign); return; }
   Object.assign(app.choice, { player: app.lastMatch.player, opponent: app.lastMatch.opponent });
   startMatch(app.lastMatch.arena);
 };

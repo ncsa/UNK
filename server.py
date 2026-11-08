@@ -48,6 +48,7 @@ CHAR_DIR = ROOT / "Characters"
 REQUEST_DIR = ROOT / "CharacterRequests"  # account + fighter requests from guests, for an admin
 SOUND_DIR = ROOT / "Sounds"
 CHAR_BUILD = ROOT / "build" / "characters"
+CAMPAIGN_BUILD = ROOT / "build" / "campaigns"  # campaign levels from add_campaign.py
 ARENA_BUILD = ROOT / "build" / "arenas"
 STATIC_DIR = ROOT / "static"
 DB_PATH = ROOT / "data" / "scores.db"
@@ -311,6 +312,55 @@ def character_asset(slug: str, rel: str):
     return FileResponse(safe_file(CHAR_BUILD / slug, rel))
 
 
+def load_level(slug):
+    """A campaign level built by add_campaign.py for the boss with this slug, or None."""
+    path = CAMPAIGN_BUILD / slug / "level.json"
+    if not slugify(slug) == slug or not path.is_file():
+        return None
+    return json.loads(path.read_text())
+
+
+def campaign_music(slug):
+    """Characters/<Name>/campaign.<audio ext>: the street's music (the boss fight uses the arena's)."""
+    for folder in sorted(CHAR_DIR.iterdir()) if CHAR_DIR.exists() else []:
+        if folder.is_dir() and slugify(folder.name) == slug:
+            return find_audio(folder, "campaign")
+    return None
+
+
+def level_enemies(level):
+    return sum(len(w["enemies"]) for w in level.get("waves", []))
+
+
+@app.get("/api/campaigns")
+def list_campaigns():
+    """Campaign levels whose boss is a built character; the game plays the street (static/brawl.js),
+    then a match against the boss in their home arena."""
+    out = []
+    for folder in sorted(CAMPAIGN_BUILD.glob("*/")) if CAMPAIGN_BUILD.exists() else []:
+        level, boss = load_level(folder.name), load_character(folder.name)
+        if level and boss:
+            out.append({"boss": folder.name, "boss_name": boss["name"], "title": level["story"].get("title") or
+                        f"{boss['name']}'s campaign", "level": f"/assets/campaigns/{folder.name}/level.json",
+                        "arena": level["boss"]["arena"], "enemies": level_enemies(level),
+                        "music": f"/assets/campaign-music/{folder.name}" if campaign_music(folder.name) else None})
+    return out
+
+
+@app.get("/assets/campaign-music/{slug}")
+def campaign_music_file(slug: str):
+    path = campaign_music(slug)
+    if not path:
+        raise HTTPException(404)
+    return FileResponse(path)
+
+
+@app.get("/assets/campaigns/{slug}/{rel:path}")
+def campaign_asset(slug: str, rel: str):
+    """A campaign level built by add_campaign.py: level.json and its layer images."""
+    return FileResponse(safe_file(CAMPAIGN_BUILD / slug, rel))
+
+
 @app.get("/assets/arenas/{name}")
 def arena_asset(name: str):
     slug = name.removesuffix(".png").removesuffix("_thumb")
@@ -395,6 +445,8 @@ def db():
         conn.execute("ALTER TABLE scores ADD COLUMN best_combo INTEGER NOT NULL DEFAULT 0")
     if "difficulty" not in cols:
         conn.execute("ALTER TABLE scores ADD COLUMN difficulty TEXT NOT NULL DEFAULT 'easy'")
+    if "mode" not in cols:  # "versus" (one match) or "campaign" (the street, then the boss)
+        conn.execute("ALTER TABLE scores ADD COLUMN mode TEXT NOT NULL DEFAULT 'versus'")
     conn.execute("""CREATE TABLE IF NOT EXISTS passwords (
         username TEXT PRIMARY KEY, salt TEXT NOT NULL, hash TEXT NOT NULL, changed REAL NOT NULL)""")
     return conn
@@ -413,6 +465,19 @@ COMBO_BASE = 50         # a combo of n hits is worth COMBO_BASE * n^2 (as in gam
 MAX_COMBO = 60          # longer combos score as this many hits
 BREAKER_POINTS = 1000   # per combo breaker the player pulled off (as in game.js)
 DIFFICULTY_BONUS = {"easy": 1.0, "medium": 1.5, "hard": 2.0}  # score multiplier for the opponent AI level
+# Campaign mode: per enemy beaten on the street, for reaching the boss, and a speed bonus for the
+# street (points per second under STREET_PAR), all before the multipliers. As in static/brawl.js.
+ENEMY_POINTS = 300
+STREET_CLEAR_POINTS = 3000
+MINI_BOSS_POINTS = 2000      # beating the street's mini boss (one round)
+STREET_PAR, STREET_SPEED_POINTS = 300, 5
+
+
+class CampaignResult(BaseModel):
+    enemies: int = Field(ge=0, le=200, description="enemies beaten on the street")
+    street_seconds: float = Field(gt=0, le=7200)
+    cleared: bool = Field(description="reached the boss")
+    mini_boss: bool = Field(False, description="beat the level's mini boss (level.json mini_boss)")
 
 
 class MatchResult(BaseModel):
@@ -429,6 +494,7 @@ class MatchResult(BaseModel):
                               description="length of each combo (2+ landed hits in a row) the player landed")
     breakers: int = Field(default=0, ge=0, le=100, description="combo breakers the player pulled off")
     difficulty: Literal["easy", "medium", "hard"] = "easy"
+    campaign: CampaignResult | None = None  # set for a campaign run: opponent is the boss
 
 
 def compute_score(result, player, opponent):
@@ -450,6 +516,10 @@ def compute_score(result, player, opponent):
     score += BREAKER_POINTS * result.breakers
     if result.won:
         score += 1000 + max(0.0, 180 - result.duration) * 5
+    if c := result.campaign:
+        score += ENEMY_POINTS * c.enemies + (MINI_BOSS_POINTS if c.mini_boss else 0)
+        if c.cleared:
+            score += STREET_CLEAR_POINTS + max(0.0, STREET_PAR - c.street_seconds) * STREET_SPEED_POINTS
     return round(score * ratio * DIFFICULTY_BONUS[result.difficulty])
 
 
@@ -473,15 +543,24 @@ def submit_score(result: MatchResult, request: Request):
         raise HTTPException(400, "match too short")
     if any(n < 2 or n > 2000 for n in result.combos):
         raise HTTPException(400, "impossible combo")
+    if c := result.campaign:
+        level = load_level(result.opponent)
+        if not level:
+            raise HTTPException(400, "no campaign for that boss")
+        mini = level.get("mini_boss")
+        if c.enemies > level_enemies(level) or (result.won and not c.cleared) or \
+                (c.cleared and c.enemies < level_enemies(level)) or (c.mini_boss and not mini) or \
+                (c.cleared and mini and not c.mini_boss):  # (a mini boss who's your own fighter is a mirror match)
+            raise HTTPException(400, "impossible campaign result")
 
     score = compute_score(result, player, opponent)
     with db() as conn:
         cur = conn.execute(
             "INSERT INTO scores (username, character, opponent, arena, won, health_left, duration, score, created,"
-            " best_combo, difficulty) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " best_combo, difficulty, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (request.state.user, result.character, result.opponent, result.arena, int(result.won),
              result.health_left, result.duration, score, time.time(), max(result.combos, default=0),
-             result.difficulty))
+             result.difficulty, "campaign" if result.campaign else "versus"))
         best = conn.execute("SELECT MAX(score) FROM scores WHERE username = ?",
                             (request.state.user,)).fetchone()[0]
         rank = conn.execute("SELECT COUNT(DISTINCT username) FROM scores s WHERE"

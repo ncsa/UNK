@@ -30,6 +30,14 @@
  "uppercut_0": "183d85cdbd01",
  "uppercut_1": "bef0a38f6e10",
  "victory_0": "060954cfd151",
- "walk_0": "de8281521cff",
- "walk_1": "f1f9b0f5cae5"
+ "walk_0": "strip",
+ "walk_1": "strip",
+ "walk_2": "strip",
+ "walk_3": "strip",
+ "walk_4": "strip",
+ "walk_5": "strip",
+ "walk_6": "strip",
+ "walk_7": "strip",
+ "walk_strip": "ad626d5be048",
+ "walk_strip_drawn": "ad626d5be048"
 }
