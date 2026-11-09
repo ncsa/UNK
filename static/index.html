@@ -107,11 +107,12 @@
   .stat i.unknown { background: repeating-linear-gradient(90deg, var(--dim) 0 4px, transparent 4px 8px); }
   .stat { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 4px; }
   .stat i { display: block; height: 6px; background: var(--gold); }
-  #difficulty { display: flex; gap: 6px; margin-top: 16px; }
-  #difficulty button { flex: 1; font-size: 10px; padding: 9px 4px; background: var(--panel); color: var(--dim);
+  #difficulty, #display { display: flex; gap: 6px; margin-top: 16px; }
+  #difficulty button, #display button { flex: 1; font-size: 10px; padding: 9px 4px; background: var(--panel); color: var(--dim);
     border: 3px solid var(--edge); }
-  #difficulty button:hover { color: var(--text); border-color: var(--dim); }
-  #difficulty button.selected { color: var(--gold); border-color: var(--gold); }
+  #difficulty button:hover, #display button:hover { color: var(--text); border-color: var(--dim); }
+  #display { margin-top: 6px; }
+  #difficulty button.selected, #display button.selected { color: var(--gold); border-color: var(--gold); }
   #difficulty button[data-level="hard"].selected { color: #ff6b6b; border-color: #ff6b6b; }
   #fight-btn { width: 100%; margin-top: 16px; font-size: 18px; padding: 14px 28px; background: var(--red); color: #fff;
     border: 3px solid #fff; box-shadow: 4px 4px 0 #000; }
@@ -148,10 +149,14 @@
   .empty { color: var(--dim); font-size: 10px; }
 
   /* ---------- fight screen ---------- */
-  #fight { position: fixed; inset: 0; background: #000; display: none; align-items: center; justify-content: center; }
+  /* The select screen's darkened campus map around the game (plain if the map is missing). */
+  #fight { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: linear-gradient(rgba(12, 12, 26, 0.6), rgba(12, 12, 26, 0.75)), url("/assets/map.jpeg") center / cover, var(--bg); }
   #fight.active { display: flex; }
+  /* Sized by fitCanvas() in game.js to a whole multiple of 384x224, so every game pixel is the same
+     square; this width is only the fallback. */
   #canvas { image-rendering: pixelated; width: min(100vw, calc(100vh * 384 / 224)); aspect-ratio: 384 / 224;
-    cursor: crosshair; }
+    cursor: crosshair; box-shadow: 0 0 0 3px #000, 0 8px 32px rgba(0, 0, 0, 0.7); }
 
   /* ---------- results screen ---------- */
   #results { max-width: 560px; margin: 0 auto; padding: 40px 16px; text-align: center; }
@@ -257,6 +262,7 @@
         <b><span class="arrow">↑</span></b> + punch together: uppercut<br>
         Being comboed? <b><span class="arrow">↓</span> <span class="arrow">↓</span> <span class="arrow">↑</span></b> then <b><span class="arrow">↑</span></b> + punch: COMBO BREAKER<br>
         <b><span class="arrow">↓</span></b> + punch/kick in the air: dive kick<br>
+        Knocked down or launched? punch just as you land or get up: RISING UPPERCUT<br>
         sweeps: block low · air attacks: block standing<br>
         <b>COMBOS</b>: land hits back to back for big points<br>
         <b>Esc</b> pause · <b>M</b> music · <b>N</b> sound effects (here or paused)<br>
@@ -272,6 +278,9 @@
       </figure>
       <div id="difficulty" role="radiogroup" aria-label="Opponent difficulty">
         <button data-level="easy">EASY</button><button data-level="medium">MEDIUM</button><button data-level="hard">HARD</button>
+      </div>
+      <div id="display" role="radiogroup" aria-label="Screen size">
+        <button data-mode="window" title="Fits in 800x600, sharp pixels">800x600</button><button data-mode="full" title="Full screen (F)">FULL SCREEN</button>
       </div>
       <button id="fight-btn" disabled>FIGHT!</button>
       <button id="campaign-btn" hidden>CAMPAIGN</button>

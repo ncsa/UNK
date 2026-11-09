@@ -25,11 +25,18 @@ const ATTACKS = {
   breaker:      { startup: 2, active: 20, recovery: 0, damage: s => s.punch_damage * 2.2, hitstun: 40, push: 4, level: "mid", launch: 8, air: true, box: [-14, -140, 60, 140] },
   // Up + punch: a rising uppercut that launches. box: its own reach, straight up in front.
   uppercut:     { startup: 3, active: 14, recovery: 0, damage: s => s.punch_damage * 1.6, hitstun: 26, push: 2, level: "mid", launch: 6.5, air: true, box: [-6, -128, 46, 118] },
+  // Rising uppercut, everyone's: punch just as you land after being launched (WAKEUP). Unblockable,
+  // and it flings the opponent about half the screen away.
+  wakeup:       { startup: 2, active: 22, recovery: 0, damage: s => s.punch_damage * 2, hitstun: 40, push: 4.8, level: "mid", launch: 6, air: true, unblockable: true, box: [-36, -140, 96, 140] },
 };
+// When the rising uppercut works after a launch: falling and within `height` of the ground, or up to
+// `late` ticks after landing. Punching while still high in the air spends the chance for that launch.
+// jump: its upward speed; invuln: ticks safe from hits as it comes out.
+const WAKEUP = { height: 30, late: 8, jump: 6, invuln: 24 };
 // Animation to show when a character's sheet predates an extended move.
 const FALLBACK_ANIMS = {
   crouch_block: "block", crouch_punch: "punch", crouch_kick: "kick",
-  jump_punch: "punch", jump_kick: "kick", dive_kick: "jump_kick", uppercut: "jump_punch", breaker: "uppercut",
+  jump_punch: "punch", jump_kick: "kick", dive_kick: "jump_kick", uppercut: "jump_punch", breaker: "uppercut", wakeup: "uppercut",
 };
 const LANDING_TICKS = 6;   // recovery after landing from an air attack
 const SPECIAL = { startup: 14, active: 16, recovery: 18, cooldown: 240 };
@@ -137,6 +144,31 @@ class Fighter {
       !["ko", "victory", "defeat"].includes(this.state) && !this.hidden && !this.held;
   }
 
+  // The rising uppercut: when falling close to the ground after a launch, or just after landing.
+  wakeWindow() {
+    if (this.wakeSpent || ["ko", "victory", "defeat"].includes(this.state) || this.hidden || this.held) return false;
+    if (this.knocked) return this.vy < 0 && this.y < WAKEUP.height;
+    return this.now - this.landedAt <= WAKEUP.late && ["hit", "landing", "idle", "walk", "crouch", "jump"].includes(this.state);
+  }
+
+  // A punch while launched: too early (still high) spends the chance; else whether it's on.
+  tryWake() {
+    if (this.wakeWindow()) return true;
+    if (this.knocked) this.wakeSpent = true;
+    return false;
+  }
+
+  wakeUp(opp, match) {
+    this.special = null; this.bound = 0; this.floating = false; this.knocked = false; this.wakeSpent = true;
+    this.setState("wakeup");
+    this.facing = opp.x >= this.x ? 1 : -1;
+    this.vy = WAKEUP.jump; this.y = Math.max(this.y, 0.01); this.vx = this.facing * 0.8;
+    this.airAttacked = true;
+    this.invuln = Math.max(this.invuln, WAKEUP.invuln);
+    this.shout = { text: "RISING UPPERCUT!", t: 50 };
+    sfx("special"); sfx("punch_whoosh", { x: this.x }); match.shake = 5;
+  }
+
   comboBreaker(opp, match) {
     opp.endCombo();
     this.special = null; this.bound = 0; this.floating = false;
@@ -173,6 +205,7 @@ class Fighter {
       x, y: 0, vx: 0, vy: 0, facing, health: this.stats.health, trail: this.stats.health,
       state: "idle", t: 0, hasHit: false, hitCount: 0, stunFor: 0, cooldown: 0, cooldowns: {},
       special: null, shout: null, combo: 0, comboLast: -999, comboShow: null, lastAttacker: null, invuln: 0, breakerCooldown: 0, holdingBack: false, holdingDown: false, airAttacked: false, hidden: false, held: false, stretch: 0, bound: 0, auditDone: 0, ghosts: [], passThrough: false, floating: false,
+      knocked: false, wakeSpent: false, landedAt: -999, now: 0,
     });
   }
 
@@ -513,7 +546,9 @@ class Fighter {
     if (this.held) return;  // inside an abduct special's vehicle
     if (this.invuln > 0) this.invuln--;
     if (this.breakerCooldown > 0) this.breakerCooldown--;
+    this.now = match.clock;
     if (input.breaker && this.canBreak()) return this.comboBreaker(opp, match);
+    if (input.wakeup && this.wakeWindow()) return this.wakeUp(opp, match);
     if (this.bound > 0) this.bound--;  // legs taped by a bind special
     if (this.cooldown > 0 && --this.cooldown === 0 && this.isPlayer) sfx("ready");
     for (const id in this.cooldowns) {
@@ -560,6 +595,7 @@ class Fighter {
       if (this.y <= 0) {
         this.y = 0; this.vy = 0;
         this.airAttacked = false;
+        if (this.knocked) { this.knocked = false; this.landedAt = match.clock; }
         if (this.state === "jump") { this.setState("idle"); this.vx = 0; sfx("land", { x: this.x }); }
         else if (ATTACKS[this.state]?.air) { this.setState("landing"); this.vx = 0; sfx("land", { x: this.x }); }
         if (this.state === "ko") this.vx *= 0.5;
@@ -847,6 +883,7 @@ class Fighter {
       else { this.setState("hit"); this.stunFor = hitstun; }
       this.vx = push * Math.sign(this.x - attacker.x || attacker.facing);
       if (launch || this.airborne) { this.vy = launch || 2.5; this.y = Math.max(this.y, 0.01); }
+      if (launch) { this.knocked = true; this.wakeSpent = false; this.knockCount = (this.knockCount || 0) + 1; }  // a chance at the rising uppercut
       match.spark(sparkX, box.y + 26, false);
       const heavy = stun || launch || damage >= attacker.stats.kick_damage;
       sfx(heavy ? "hit_heavy" : "hit_light", { x: this.x });
@@ -1114,7 +1151,8 @@ function drawBubble(ctx, text, x, bottom) {
   const lines = wrapText(ctx, text.toUpperCase(), 130);
   const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 10;
   const h = lines.length * 10 + 6;
-  const bx = clamp(Math.round(x - w / 2), 2, W - w - 2), by = Math.max(2, Math.round(bottom - h - 6));
+  // kept below the health bars and names at the top of the screen
+  const bx = clamp(Math.round(x - w / 2), 2, W - w - 2), by = Math.max(38, Math.round(bottom - h - 6));
   ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
   ctx.fillRect(bx, by, w, h); ctx.strokeRect(bx, by, w, h);
   ctx.beginPath(); ctx.moveTo(x - 4, by + h); ctx.lineTo(x, by + h + 6); ctx.lineTo(x + 4, by + h); ctx.fill();
@@ -1244,6 +1282,11 @@ class PlayerInput {
   // Called after the fighter has seen the input, so a buffered press survives until it can act.
   consume(fighter) {
     if (!this.pending) return {};
+    // Punch just as you land after a launch: the rising uppercut (too early wastes it).
+    if (this.pending.attack === "punch" && (fighter.knocked || fighter.wakeWindow())) {
+      this.pending = null;
+      return fighter.tryWake() ? { wakeup: true } : {};
+    }
     if (this.pending.breaker) {  // usable mid-combo, when nothing else is
       if (fighter.canBreak()) { this.pending = null; return { breaker: true }; }
       if (fighter.canAct) { this.pending = null; return { attack: "punch" }; }  // not being comboed: W + punch, an uppercut
@@ -1285,6 +1328,11 @@ class AI {
     // fighters with a high block trait).
     if (f.canBreak() && opp.combo >= 3 &&
         Math.random() < (0.002 + 0.006 * tr.block) * (opp.combo - 2) * this.lv.breaker) return { breaker: true };
+    // Rising uppercut: one try per launch, as it nears the ground, more often on harder levels.
+    if (f.knocked && f.vy < 0 && f.y < WAKEUP.height && this.wakeRoll !== f.landedAt + ":" + f.knockCount) {
+      this.wakeRoll = f.landedAt + ":" + f.knockCount;
+      if (Math.random() < 0.12 * this.lv.breaker ** 0.7) return { wakeup: true };
+    }
     const toward = opp.x >= f.x ? 1 : -1;
     const dist = Math.abs(opp.x - f.x);
 
@@ -1678,7 +1726,8 @@ class Match {
     if (a.t < atk.startup || a.t >= atk.startup + atk.active) return;
     if (overlap(atk.box ? a.worldBox(atk.box) : a.hitBox(), d.hurtBox())) {
       a.hasHit = true;
-      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push, level: atk.level, launch: atk.launch || 0, basic: true });
+      d.receive(a, atk.damage(a.stats), this, { hitstun: atk.hitstun, push: atk.push, level: atk.level, launch: atk.launch || 0,
+                                                unblockable: !!atk.unblockable, basic: !atk.unblockable });
       if (a.state === "dive_kick") { a.vy = 3.6; a.vx = -a.facing * 1.8; }  // bounce off
     }
   }
@@ -2413,7 +2462,7 @@ class Match {
       ctx.font = `16px ${FONT}`; ctx.textAlign = "center";
       outlinedText(ctx, "PAUSED", W / 2, H / 2 - 8, "#fff", 2);
       ctx.font = `8px ${FONT}`;
-      outlinedText(ctx, "ESC RESUME  ·  Q QUIT", W / 2, H / 2 + 14, "#ccc");
+      outlinedText(ctx, "ESC RESUME  ·  Q QUIT  ·  F FULL SCREEN", W / 2, H / 2 + 14, "#ccc");
       outlinedText(ctx, `M MUSIC ${music.muted ? "OFF" : "ON"}  ·  N SOUND ${sound.muted ? "OFF" : "ON"}`,
                    W / 2, H / 2 + 28, "#ccc");
     }
@@ -2519,6 +2568,47 @@ function armIdle() {
 for (const ev of ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"]) {
   window.addEventListener(ev, () => { if ($("select").classList.contains("active")) armIdle(); }, { passive: true });
 }
+
+// ------------------------------------------------------------------ screen size
+// The game draws at 384x224 and is scaled up with blocky pixels. The scale is always a whole number
+// of screen pixels per game pixel (counting a Retina display's real pixels), since at an in-between
+// scale some rows come out a pixel thicker than others and edges wobble as fighters move.
+//   800x600 (the default): the largest whole scale that fits inside 800x600, smaller if the window
+//     is: 768x448 (2x on a standard screen, 4 screen pixels per game pixel on a Retina one).
+//   full screen (button or F): the largest whole scale that fits the screen, black around it.
+const WINDOW_BOX = [800, 600];
+
+function isFullscreen() { return !!document.fullscreenElement; }
+
+function fitCanvas() {
+  const c = $("canvas"), dpr = window.devicePixelRatio || 1;
+  const fits = Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H));
+  const box = Math.floor(Math.min(WINDOW_BOX[0] * dpr / W, WINDOW_BOX[1] * dpr / H));
+  const k = isFullscreen() ? fits : Math.min(fits, box);
+  if (k < 1) { c.style.width = c.style.height = ""; return; }  // tiny window: just fit it
+  c.style.width = `${k * W / dpr}px`;
+  c.style.height = `${k * H / dpr}px`;
+  for (const b of document.querySelectorAll("#display button"))
+    b.classList.toggle("selected", (b.dataset.mode === "full") === isFullscreen());
+}
+
+function setFullscreen(on) {
+  if (on === isFullscreen()) return;
+  const req = on ? document.documentElement.requestFullscreen?.() : document.exitFullscreen?.();
+  req?.catch?.(() => {});  // refused (e.g. not from a click or key press): stay as we are
+}
+
+for (const b of document.querySelectorAll("#display button"))
+  b.onclick = () => { sfx("menu_move"); setFullscreen(b.dataset.mode === "full"); };
+window.addEventListener("resize", fitCanvas);
+document.addEventListener("fullscreenchange", fitCanvas);
+// F toggles full screen on any screen (it isn't a fighting key); not while typing initials.
+window.addEventListener("keydown", e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.("input, textarea")) return;
+  if (e.key.toLowerCase() === "f" && !($("results").classList.contains("active") && !$("initials").hidden))
+    setFullscreen(!isFullscreen());
+});
+fitCanvas();
 
 window.addEventListener("keydown", e => {
   if (e.repeat || e.target.matches?.("input, textarea") || !$("select").classList.contains("active")) return;

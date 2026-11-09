@@ -34,7 +34,15 @@ const HERO_MOVES = {
   // everyone around.
   breaker:    { startup: 2, active: 20, recovery: 0, damage: s => s.punch_damage * 2.2, push: 4, knock: true, air: true,
                 box: [-40, -140, 100, 140] },
+  // Rising uppercut, everyone's: punch just as you get up off the ground (STREET_WAKEUP). Unblockable; each
+  // enemy it hits is flung away from the hero (around: by which side they're on) about half the screen.
+  wakeup:     { startup: 2, active: 22, recovery: 0, damage: s => s.punch_damage * 2, knock: true, air: true,
+                anim: "uppercut", box: [-36, -140, 96, 140], launch: 6, fling: 4.3, unblockable: true, around: true },
 };
+// When the rising uppercut works: from early ticks before the end of lying down, through getting up,
+// to late ticks after standing. A punch pressed while lying down before that spends the chance for
+// this knockdown, so mashing doesn't work. jump: its upward speed; invuln: ticks safe from hits.
+const STREET_WAKEUP = { early: 14, late: 8, jump: 6, invuln: 40 };
 // Special moves on the street: each fighter's specials, same inputs, animation and shout, with an
 // effect reworked for a crowd of enemies along a street instead of one opponent:
 //   shot     something flies down the lane (the move's prop): projectile, bind (tapes them up), cat (runs
@@ -534,8 +542,18 @@ class Street {
       sfx("vo_combo_breaker"); sfx("special"); this.shake = 8;
       h.shout = { text: "COMBO BREAKER!", t: 70 };
     }
-    const mv = HERO_MOVES[h.state];
-    if (h.down) { h.updateDown(this); if (h.state === "dead") h.hp = 0; }
+    // Rising uppercut: punch just as you get up (STREET_WAKEUP). Too early while lying there spends the chance.
+    if (h.state === "fall") h.wakeSpent = false;
+    if (h.down && h.hp > 0 && this.phase === "play" && ["punch", "uppercut"].includes(this.pending?.what)) {
+      this.take();
+      if (h.state === "down" && h.t < STREET.down - STREET_WAKEUP.early) h.wakeSpent = true;
+      else if (h.state !== "fall" && !h.wakeSpent) this.wakeUp();
+    }
+    const mv = HERO_MOVES[h.state], wasDown = h.down;
+    if (h.down) {
+      h.updateDown(this); if (h.state === "dead") h.hp = 0;
+      if (wasDown && h.state === "idle") h.upAt = this.clock;
+    }
     else if (h.state === "hit") { if (h.t >= 18) h.setState("idle"); }
     else if (h.state === "special") this.updateSpecial(inp);
     else if (AIR_STATES.has(h.state)) {
@@ -563,6 +581,9 @@ class Street {
         else act = p.token === "LMB" ? "punch" : "kick";  // still cooling down: a plain attack instead
       }
       if (act === "breaker") act = "uppercut";  // not being comboed: up + punch
+      if ((act === "punch" || act === "uppercut") && !h.wakeSpent && this.clock - (h.upAt ?? -99) <= STREET_WAKEUP.late) {
+        this.wakeUp(); act = "started";  // a moment late, just after standing up: still counts
+      }
       if (act === "started") {
         // the special move began above
       } else if (act === "uppercut" && !inp.crouch) {
@@ -696,6 +717,14 @@ class Street {
     }
   }
 
+  wakeUp() {
+    const h = this.hero;
+    h.setState("wakeup"); h.vh = STREET_WAKEUP.jump; h.vx = h.facing * 0.8; h.h = 0.01; h.chain = 0; h.stagger = 0;
+    h.invuln = Math.max(h.invuln, STREET_WAKEUP.invuln); h.wakeSpent = true; h.upAt = -99;
+    sfx("special"); sfx("punch_whoosh", { x: h.x }); this.shake = 5;
+    h.shout = { text: "RISING UPPERCUT!", t: 50 };
+  }
+
   heroAttack(name) {
     const h = this.hero;
     h.setState(name);
@@ -710,20 +739,21 @@ class Street {
   }
 
   hitEnemy(e, m, box) {
-    const h = this.hero, dir = h.facing;
+    const h = this.hero, dir = m.around ? (e.x >= h.x ? 1 : -1) : h.facing;
     const sx = dir > 0 ? box.x + box.w : box.x, sy = box.y + box.h / 2;
-    if (e.state === "block" && e.facing === -dir) {
+    if (e.state === "block" && e.facing === -dir && !m.unblockable) {
       sfx("block", { x: e.x }); this.sparks.push({ x: sx, y: sy, t: 0, blocked: true });
       e.x += dir * 2;
       return;
     }
     this.sparks.push({ x: sx, y: sy, t: 0 });
-    this.damage(e, m.damage(h.stats), dir, { knock: m.knock, stun: m.stun, push: m.push });
+    this.damage(e, m.damage(h.stats), dir, { knock: m.knock, stun: m.stun, push: m.push, launch: m.launch, fling: m.fling });
   }
 
   // Damage an enemy: knocked down by a knockdown move, a fourth hit in a row or running out of health;
   // otherwise it flinches (stun: ticks), or is left dizzy (daze: ticks) or launched (launch: speed up).
-  damage(e, amount, dir, { knock = false, stun = 16, push = 1.5, daze = 0, launch = 0, taped = false } = {}) {
+  // fling: how fast a launched enemy flies sideways.
+  damage(e, amount, dir, { knock = false, stun = 16, push = 1.5, daze = 0, launch = 0, fling = 1.2, taped = false } = {}) {
     const h = this.hero;
     if (!e.hittable && e.state !== "dizzy") return false;
     e.hp -= amount;
@@ -734,7 +764,7 @@ class Street {
     e.stagger++; e.lastHitT = this.clock;
     e.facing = -dir;
     if (launch) {
-      e.stagger = 0; e.fallFrom(dir, 1.2); e.vh = launch; this.shake = 6;
+      e.stagger = 0; e.fallFrom(dir, fling); e.vh = launch; this.shake = 6;
     } else if (knock || e.hp <= 0 || e.stagger >= 4) {
       e.stagger = 0; e.fallFrom(dir, e.kind.heavy ? 1.4 : 2.6); this.shake = 6;
     } else if (daze) {
@@ -1304,19 +1334,22 @@ class Street {
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     for (const a of actors) {
       const rx = a.down ? 28 : a.lift > 4 ? 13 : 18;  // smaller under something hovering
+      ctx.globalAlpha = a.state === "dead" ? Math.max(0, Math.min(1, (70 - a.t) / 25)) : 1;  // fades with the body
       ctx.beginPath(); ctx.ellipse(Math.round(a.x - cx), Math.round(a.z) + 1, rx, a.lift > 4 ? 3 : 4, 0, 0, Math.PI * 2); ctx.fill();
     }
+    ctx.globalAlpha = 1;
     this.drawPickups(ctx, cx);
     for (const a of actors.sort((p, q) => p.z - q.z)) {
-      const blink = (a.state === "dead" && a.t > 20 && a.t % 8 < 4) || (a.invuln && a.invuln % 6 < 3);
-      if (blink) continue;
+      // No blinking, not even while briefly unhittable after getting up; a beaten enemy lies still,
+      // then fades away over its last 25 ticks (it's removed at 70).
+      const fade = a.state === "dead" ? Math.max(0, Math.min(1, (70 - a.t) / 25)) : 1;
       if (a.boss) {
         const anims = a.char.sheetData.animations, anim = a.moving && anims.walk ? anims.walk : anims.idle;
         drawFrame(ctx, a.char.img, frameOf(anim, this.clock), a.x - cx, a.z, -1);
         continue;
       }
       const img = a === h ? h.char.img : a.kind.img;
-      drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h - (a.lift || 0), a.facing);
+      drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h - (a.lift || 0), a.facing, fade);
     }
     for (const s of this.shots) this.drawShot(ctx, s, cx);
     this.drawFx(ctx, cx);
@@ -1325,7 +1358,8 @@ class Street {
       if (e.taped) drawTape(ctx, Math.round(e.x - cx), Math.round(e.z), f.w, e.stunFor - e.t);
       drawDizzy(ctx, Math.round(e.x - cx), Math.round(e.z - f.ay - 4), this.clock);
     }
-    if (h.shout) drawBubble(ctx, h.shout.text, Math.round(h.x - cx), Math.round(h.z - h.h - h.frame().ay - 6));
+    // kept below the health bars when the hero is high in the air
+    if (h.shout) drawBubble(ctx, h.shout.text, Math.round(h.x - cx), Math.max(60, Math.round(h.z - h.h - h.frame().ay - 6)));
     for (const s of this.sparks) {
       ctx.fillStyle = s.blocked ? "#9fd8ff" : "#fff";
       const r = 3 + s.t;
@@ -1442,7 +1476,7 @@ class Street {
       ctx.font = `16px ${FONT}`; ctx.textAlign = "center";
       outlinedText(ctx, "PAUSED", W / 2, H / 2 - 10, "#fff", 2);
       ctx.font = `8px ${FONT}`;
-      outlinedText(ctx, "ESC RESUME  ·  Q QUIT", W / 2, H / 2 + 12, "#ccc");
+      outlinedText(ctx, "ESC RESUME  ·  Q QUIT  ·  F FULL SCREEN", W / 2, H / 2 + 12, "#ccc");
       outlinedText(ctx, `M MUSIC ${music.muted ? "OFF" : "ON"}  ·  N SOUND ${sound.muted ? "OFF" : "ON"}`, W / 2, H / 2 + 28, "#ccc");
     }
   }
