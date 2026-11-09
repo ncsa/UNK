@@ -158,6 +158,13 @@ class Hero extends Brawler {
   frame() {
     const s = this.state, mv = HERO_MOVES[s];
     if (mv) return frameOf(this.anim(mv.anim || s), 0, this.t < mv.startup ? 0 : 1);
+    if (s === "special" && this.sp.effect === "beam") {
+      // As in a match (game.js): beam_frame is the frame that fires; 0 (eyes) stands normally while
+      // charging, 1 (hands) winds up on the other frame first.
+      const fire = this.sp.beam_frame || 0;
+      if (this.t < SPECIAL.startup && !fire) return frameOf(this.anim("idle"), 0, 0);
+      return frameOf(this.anim(this.sp.id), 0, this.t < SPECIAL.startup ? 0 : fire);
+    }
     if (s === "special") return frameOf(this.anim(this.sp.id), 0, this.t < SPECIAL.startup ? 0 : 1);
     if (["fall", "down", "dead"].includes(s)) return frameOf(this.anim("ko"), 0, 0);
     if (s === "getup") return frameOf(this.anim("crouch"), 0, 0);
@@ -1023,10 +1030,14 @@ class Street {
     const h = this.hero;
     if (h.state === "special") {
       const sp = h.sp, kind = STREET_SPECIALS[sp.effect], t = h.t - SPECIAL.startup;
-      if (kind === "beam" && t >= 0 && t < BEAM.active) {  // on from where the drawing's own beam leaves the frame
-        const f = h.frame(), y0 = f.edge ? (f.edge[0] + f.edge[1]) / 2 : -f.ay * 0.62, x0 = f.edge ? f.w - f.ax - 1 : (f.front ? f.front[0] : 20);
+      if (kind === "beam" && t >= 0 && t < BEAM.active) {
+        // Drawn over the beam in the sprite itself (muted grey in the palette), from where it starts
+        // (edge: its top and bottom rows and first column, as in a match), so none of it shows.
+        const f = h.frame(), y0 = f.edge ? (f.edge[0] + f.edge[1]) / 2 : -f.ay * 0.62;
+        const x0 = f.edge ? (f.edge[2] ?? f.w - f.ax - 1) : (f.front ? f.front[0] : 20);
         const sx = Math.round(h.x - cx + h.facing * x0), sy = Math.round(h.z - h.h + y0), ex = h.facing > 0 ? W : 0;
-        const blast = sp.beam_style === "blast", th = blast ? BLAST.thickness : 6, flick = t % 4 < 2 ? 1 : 0;
+        const blast = sp.beam_style === "blast", flick = t % 4 < 2 ? 1 : 0;
+        const th = blast ? BLAST.thickness : f.edge ? Math.max(6, f.edge[1] - f.edge[0] + 4) : 6;
         ctx.fillStyle = blast ? "#c98a1a" : "#a01010"; ctx.fillRect(Math.min(sx, ex), sy - th / 2 - flick, Math.abs(ex - sx), th + flick * 2);
         ctx.fillStyle = blast ? "#ffd23f" : "#ff4040"; ctx.fillRect(Math.min(sx, ex), sy - th / 3, Math.abs(ex - sx), th * 2 / 3);
         ctx.fillStyle = "#fff"; ctx.fillRect(Math.min(sx, ex), sy - 1, Math.abs(ex - sx), 2);
