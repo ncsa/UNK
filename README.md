@@ -27,6 +27,9 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
+Once your key files are in place (see [Adding a fighter](#adding-a-fighter)), `source setup.sh` does this for
+you instead: it creates `.venv` the first time, activates it, and loads the keys.
+
 Create `users.csv` (it's kept out of git) with one login per line,
 `username,password,character`. The character is the fighter that player always plays; players
 choose only their opponent. A `guest` login may pick any fighter:

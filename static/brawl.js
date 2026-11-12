@@ -64,6 +64,9 @@ const STREET_SPECIALS = {
   slideshow: "daze", stun: "daze", dash: "dash", tornado: "dash", charge: "van", melee: "strike", uppercut: "strike",
   flip: "strike", hurricane: "dash", stretch: "strike", flurry: "strike", teleport: "strike", area: "area", float: "float", abduct: "abduct",
 };
+// The stretching kick (stretch specials) on the street: how far the leg can reach past its drawing,
+// how far when no one is ahead, and how many ticks it stays out.
+const STRETCH = { max: 280, idle: 150, hold: 16 };
 const AIR_STATES = new Set(["jump", ...Object.keys(HERO_MOVES).filter(k => HERO_MOVES[k].air)]);
 // Per difficulty: how many enemies attack at once, ticks they wait between attacks, how long
 // their windups are, how hard they hit, and how often a blocker blocks.
@@ -94,6 +97,19 @@ function enemyKind(info, sheet, img) {
 function frameOf(anim, t, hold) {
   if (hold !== undefined) return anim.frames[Math.min(hold, anim.frames.length - 1)];
   return anim.frames[Math.floor(t / (60 / anim.fps)) % anim.frames.length];
+}
+
+// A frame with its front part pulled out by ext pixels (a stretching kick), as Fighter.draw does
+// in a match: the body, a 1-pixel column of the leg stretched across the gap, then the foot.
+function drawStretched(ctx, img, f, x, y, facing, ext) {
+  ctx.save();
+  ctx.translate(Math.round(x), Math.round(y));
+  if (facing < 0) ctx.scale(-1, 1);
+  const cut = f.ax + Math.round((f.w - f.ax) * 0.6);
+  ctx.drawImage(img, f.x, f.y, cut, f.h, -f.ax, -f.ay, cut, f.h);
+  ctx.drawImage(img, f.x + cut, f.y, 1, f.h, -f.ax + cut, -f.ay, ext, f.h);
+  ctx.drawImage(img, f.x + cut, f.y, f.w - cut, f.h, -f.ax + cut + ext, -f.ay, f.w - cut, f.h);
+  ctx.restore();
 }
 
 function drawFrame(ctx, img, f, x, y, facing, alpha = 1) {
@@ -816,7 +832,7 @@ class Street {
 
   startSpecial(sp) {
     const h = this.hero;
-    h.setState("special"); h.sp = sp; h.vx = 0; h.chain = 0;
+    h.setState("special"); h.sp = sp; h.vx = 0; h.chain = 0; h.stretch = 0;
     h.cooldowns[sp.id] = this.clock + (sp.cooldown ? Math.round(sp.cooldown * 60) : SPECIAL.cooldown);
     h.shout = { text: sp.shout || sp.name, t: 90 };
     sfx("special", { x: h.x });
@@ -961,8 +977,20 @@ class Street {
             if (h.h <= 0) { h.h = 0; h.vh = 0; h.vx = 0; h.setState("idle"); sfx("land", { x: h.x }); }
           }
           return;
+        } else if (e === "stretch") {
+          // As in a match: the kicking leg stretches out to the nearest enemy ahead (or a long way if
+          // none), holds, then snaps back; it hits everyone it reaches in the lane.
+          const f = h.frame(), base = f.hit ? f.hit[0] + f.hit[2] : f.w - f.ax;
+          const target = this.ahead(STRETCH.max + base).sort((a, b) => Math.abs(a.x - h.x) - Math.abs(b.x - h.x))[0];
+          const want = t >= S && t < S + STRETCH.hold
+            ? clamp(target ? Math.abs(target.x - h.x) - base + 10 : STRETCH.idle, 0, STRETCH.max) : 0;
+          h.stretch = (h.stretch || 0) + clamp(want - (h.stretch || 0), -24, 36);
+          if (t >= S && t < S + STRETCH.hold && h.stretch > 0)
+            for (const en of this.ahead(base + h.stretch))
+              if (!h.struck.has(en)) { h.struck.add(en); this.damage(en, dmg, dir, { knock: true }); }
+          end = t >= S + STRETCH.hold && h.stretch <= 0 ? t : t + 1;
         } else {
-          const at = e === "teleport" ? S + 6 : S, reach = e === "stretch" ? 150 : 66;
+          const at = e === "teleport" ? S + 6 : S, reach = 66;
           if (t === at) for (const en of this.ahead(reach)) this.damage(en, dmg * (e === "melee" ? 1.2 : 1), h.facing, { knock: true });
           end = S + 24;
         }
@@ -1360,6 +1388,10 @@ class Street {
         continue;
       }
       const img = a === h ? h.char.img : a.kind.img;
+      if (a === h && h.state === "special" && h.sp?.effect === "stretch" && h.stretch > 0) {
+        drawStretched(ctx, img, a.frame(), a.x - cx, a.z - a.h, a.facing, Math.round(h.stretch));
+        continue;
+      }
       drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h - (a.lift || 0), a.facing, fade);
     }
     for (const s of this.shots) this.drawShot(ctx, s, cx);

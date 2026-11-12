@@ -95,7 +95,8 @@ flowchart LR
 - This folder copied to the server (a `git clone` works), **including `build/`**: the image
   serves the sprite sheets in it. Plus `users.csv`, which isn't in git or the image. For
   example: `rsync -av --exclude .venv --exclude Sounds/raw ./ <server>:unk/`
-- No Python needed on the server. `source setup.sh` only sets `UNK_HOSTNAME` and `ACME_EMAIL`.
+- No Python needed on the server. On the server `source setup.sh` only sets `UNK_HOSTNAME` and `ACME_EMAIL`;
+  on your own machine (where the `*_key.txt` files are) it also loads the keys and sets up and activates `.venv`.
 
 ### Deploy
 
