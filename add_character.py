@@ -30,6 +30,11 @@ Every new character frame gets a quick vision check (~$0.003) for extra or missi
 redrawn, up to 3 tries, if it fails. --check runs the same check on cached frames and redraws the
 bad ones, e.g.  python add_character.py --all --check
 
+The frames stage also measures the head in the standing, crouching and special-move frames (~$0.003
+each, cached in frames/.heads.json). The sheet stage resizes a crouch or special-move frame whose head
+would come out more than 15% off from the standing one (5% for crouches), e.g. a "crouch" drawn nearly upright, or a rider
+drawn small on a horse; it logs each one. "frame_scale" in character.json still overrides by hand.
+
 Drafts: a folder needs only the reference image to start. Without <Folder>.txt a template one
 is written for you to fill in; until it's edited the character gets default stats and no special
 moves, and is playable. Edit the text file any time and run this again: a changed text file is re-parsed automatically (keeping fields you added by
@@ -204,11 +209,33 @@ Facial expression: {expression}
 Requirements:
 - exactly one full-body sprite, side view facing RIGHT (a 3/4 view toward the right is fine, like Street Fighter II)
 - the whole body is visible including both feet, centered, about 80% of the image height
-- normal anatomy: exactly two legs and two arms, every limb attached; a raised or kicking leg is one
-  of the two, so only one foot stays on the ground
+- {anatomy}
 - 16-bit pixel-art style with crisp pixels, limited palette, dark outlines
 - no text, no UI, no shadow, no ground, no rocks, no other people, no animals or objects held{prop_note}
 - background: perfectly flat solid magenta (#FF00FF) with no gradient or texture"""
+
+def anatomy_line(arms, legs):
+    """FRAME_PROMPT's anatomy requirement for a character with this many arms and legs."""
+    if (arms, legs) == (2, 2):
+        return ("normal anatomy: exactly two legs and two arms, every limb attached; a raised or kicking leg is one\n"
+                "  of the two, so only one foot stays on the ground")
+    w = lambda n: NUMBER_WORDS.get(n, str(n))
+    feet = ("only ONE foot stays on the ground (never a third leg)" if legs == 2
+            else f"only {w(legs - 1)} feet stay on the ground")
+    return (f"anatomy exactly as in the reference image: {w(legs)} legs and {w(arms)} arms, ALL of them visible and "
+            f"attached, none\n  missing or merged; a raised or kicking leg is one of the {w(legs)}, so {feet}")
+
+
+def walk_prompt(arms, legs):
+    """WALK_STRIP_PROMPT for a character with this many arms and legs (unchanged for two and two)."""
+    if (arms, legs) == (2, 2):
+        return WALK_STRIP_PROMPT
+    w = lambda n: NUMBER_WORDS.get(n, str(n))
+    return WALK_STRIP_PROMPT.replace("Exactly two legs and two arms in every figure.",
+                                     f"Exactly {w(legs)} legs and {w(arms)} arms in every figure, as in the reference image.")
+
+
+NUMBER_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 8: "eight"}
 
 WALK_STRIP_PROMPT = """Using the reference images, draw a WALK CYCLE sprite sheet for a 1990s SNES 16-bit fighting game.
 The first image is the character; the second is an approved sprite of them: match its art style, pixel size,
@@ -287,7 +314,10 @@ Rules:
   "cat" (stops fighting to pet an animal, its prop, which runs in from across the screen; heals),
   "slideshow" (a giant boring presentation fills the screen and puts the opponent to sleep),
   "rain" (something, its prop, is thrown up and rains down over the whole screen),
-  "float" (hovers in the air for a few seconds, e.g. to dodge attacks).
+  "float" (hovers in the air for a few seconds, e.g. to dodge attacks),
+  "stomp" (leaps up off the top of the screen and comes crashing down feet first onto the opponent),
+  "wrangle" (leaves the screen and comes riding back in on an animal or vehicle, lassoing or snaring the
+  opponent in passing, leaving them tied up; its prop is the animal or vehicle).
   suggested_input: ALWAYS propose a sequence that suits the move, in fighting-game style, for a fighter facing
   right (D = toward the opponent, A = away). 2 or 3 directions then LMB or RMB: end in LMB for hand, weapon
   or thrown moves, RMB for leg, dash or body moves. Conventions: throwing or projectile S, D, LMB; rising or
@@ -338,7 +368,7 @@ PARSE_SCHEMA = {
             "description": {"type": "string"},
             "input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
             "suggested_input": {"type": "array", "items": {"type": "string", "enum": INPUT_TOKENS}},
-            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "flurry", "flip", "hurricane", "audit", "orbital", "dash", "tornado", "cat", "slideshow", "rain", "float"]},
+            "effect": {"type": "string", "enum": ["projectile", "melee", "area", "stun", "charge", "stretch", "teleport", "bind", "beam", "uppercut", "flurry", "flip", "hurricane", "audit", "orbital", "dash", "tornado", "cat", "slideshow", "rain", "float", "stomp", "wrangle"]},
             "pose_frames": {"type": "array", "items": {"type": "string"}},
             "height_ratio": {"type": "number"},
             "prop": {"type": ["string", "null"]},
@@ -408,6 +438,8 @@ PROFILE_TEMPLATE = """# Profile for {name}. Fill this in, then run add_character
 # Strength: 100
 # Defense: 100
 
+# Not two arms (or legs)? Say how many, e.g. "Arms: 4", and every frame is drawn and checked that way.
+
 Special moves:
 # Up to 4, one per line starting with "- ". Each needs only a name and what happens; a button
 # sequence that suits the move is picked for you. To choose your own, end the line with one:
@@ -439,6 +471,27 @@ def notes_removed(text):
 MINI_BOSS_LINE = re.compile(r"(?im)^[ \t]*(?:[-*•][ \t]*)?mini[ -]?boss[ \t]*:[^\n]*(?:\n|$)")  # "- Mini boss:" too
 
 
+# "Arms: 4" (or "Legs: 4") in a profile, for a character who doesn't have the usual two: the drawing
+# prompts ask for that many and the anatomy check expects it. Like the mini boss line it isn't sent
+# to the parser, so adding or changing it doesn't re-parse the profile ("arms"/"legs" set by hand in
+# character.json work too; the text file wins).
+LIMB_LINE = re.compile(r"(?im)^[ \t]*(?:[-*•][ \t]*)?(arms|legs)[ \t]*:[ \t]*(\d+)[ \t]*(?:\n|$)")
+
+
+def limbs(folder, char):
+    """(arms, legs) the character has: 2 and 2 unless the profile or character.json says otherwise."""
+    counts = {"arms": int(char.get("arms", 2)), "legs": int(char.get("legs", 2))}
+    txt = next(iter(sorted(folder.glob(f"{folder.name}.txt"))), None)
+    if txt:
+        for kind, n in LIMB_LINE.findall(txt.read_text()):
+            counts[kind.lower()] = int(n)
+    return counts["arms"], counts["legs"]
+
+
+def hand_lines_removed(text):
+    return LIMB_LINE.sub("", MINI_BOSS_LINE.sub("", text))
+
+
 def mini_boss_of(txt):
     """The character named on a profile's "Mini boss:" line, or None."""
     m = MINI_BOSS_LINE.search(txt.read_text()) if txt and txt.exists() else None
@@ -447,7 +500,7 @@ def mini_boss_of(txt):
 
 def profile_text(txt):
     """The text file without its # note lines (or a mini boss line)."""
-    return notes_removed(MINI_BOSS_LINE.sub("", txt.read_text()))
+    return notes_removed(hand_lines_removed(txt.read_text()))
 
 
 def text_hash(txt):
@@ -460,7 +513,7 @@ def text_hashes(txt):
     if not txt:
         return [None]
     text = txt.read_text()
-    bare = MINI_BOSS_LINE.sub("", text)
+    bare = hand_lines_removed(text)
     h = lambda t: hashlib.sha1(t.encode()).hexdigest()[:12]
     return [h(bare)] + ([h(bare.rstrip("\n")), h(bare.rstrip("\n") + "\n")] if bare != text else [])
 
@@ -568,7 +621,7 @@ ANATOMY_PROMPT = """This is one sprite of a single video game character drawn in
 Check the CHARACTER's own body only (ignore animals, props, effects and motion lines).
 Count legs: a leg is a thigh, shin and foot joined at the hips; count one that is partly hidden.
 Count arms the same way. List any anatomy problems: extra or missing legs, arms, feet or hands,
-a limb not attached to the body, two heads. A normal person has exactly 2 legs and 2 arms."""
+a limb not attached to the body, two heads. This character has exactly {legs} legs and {arms} arms."""
 
 ANATOMY_SCHEMA = {"type": "object", "properties": {
     "legs": {"type": "integer"}, "arms": {"type": "integer"},
@@ -599,7 +652,7 @@ def lying_shape(img):
 ANATOMY_TRIES = 3  # images per frame before keeping one that still fails the check
 
 
-def anatomy_problems(img, pose, arms=True):
+def anatomy_problems(img, pose, arms=True, limbs=(2, 2)):
     """What's wrong with a generated character frame, per a quick vision check (~$0.002); empty
     if it looks like one person with two legs and two arms. Image models often add a leg on kicks
     and jumps: the standing pose they're anchored to has two feet planted. arms=False for special
@@ -612,18 +665,121 @@ def anatomy_problems(img, pose, arms=True):
     small.thumbnail((512, 512))
     try:
         resp = gemini().models.generate_content(
-            model=TEXT_MODEL, contents=[ANATOMY_PROMPT.format(pose=pose), small], config=config)
+            model=TEXT_MODEL, contents=[ANATOMY_PROMPT.format(pose=pose, arms=limbs[0], legs=limbs[1]), small],
+            config=config)
         usage.record(TEXT_MODEL, resp)
         r = json.loads(resp.text)
     except Exception as e:  # a failed check shouldn't stop the build
         log(f"    anatomy check failed: {str(e)[:200]}")
         return []
-    problems = [p for p in r.get("problems") or [] if arms or "arm" not in p.lower()]
-    if r.get("legs") != 2:
+    # A character with extra limbs: the count may be off by one (on a four-armed reference picture it
+    # said five), so that much is allowed; still enough to catch one drawn with the usual two. Then
+    # complaints about "extra" limbs aren't problems either.
+    slack = lambda want: 0 if want == 2 else 1
+    arms_ok = abs((r.get("arms") or 0) - limbs[0]) <= slack(limbs[0])
+    legs_ok = abs((r.get("legs") or 0) - limbs[1]) <= slack(limbs[1])
+    unusual = limbs != (2, 2) and arms_ok and legs_ok
+    problems = [p for p in r.get("problems") or [] if (arms or "arm" not in p.lower())
+                and not (unusual and re.search(r"\b(arm|leg|hand|feet|foot)s?\b", p, re.I))]
+    if not legs_ok:
         problems.insert(0, f"{r.get('legs')} legs")
-    if arms and r.get("arms") != 2:
+    if arms and not arms_ok:
         problems.insert(0, f"{r.get('arms')} arms")
     return problems
+
+
+# Head size, for the sheet's scale check. Every frame is drawn filling the picture, so the sheet
+# sizes each pose as a set fraction of the standing height (a crouch 0.9, a crouching kick 0.7).
+# That's right when the pose really is that low, but a "crouch" drawn nearly upright, or a rider
+# drawn small on a horse that fills the picture, comes out the wrong size. The head shouldn't change
+# size from pose to pose, so it's measured once per frame (~$0.003, cached in frames/.heads.json
+# by the frame's file hash) and the sheet stage, still offline, corrects frames that are off.
+# Only the poses whose set size is a guess about how low they were drawn: the crouches, plus special
+# moves. Standing poses are drawn standing, and a thrown-back, roaring or hatted head (hit, victory)
+# measures badly, which made those frames come out too big.
+HEAD_SCALED = {"crouch", "crouch_block", "crouch_punch", "crouch_kick"}  # plus specials
+# Off by more than this (as a fraction) gets corrected; the measurement varies ~10% either way. Crouches
+# get a tighter limit: the set size there always errs the same way (every crouch measured so far came out
+# 5-50% too small, as the generator draws them more upright than a real squat), and even 6% shows.
+HEAD_TOLERANCE = 0.15
+HEAD_TOLERANCE_CROUCH = 0.05
+
+HEAD_PROMPT = """Find the head of the character in this video game sprite (the person or creature, not an
+animal they ride, nor a prop). Give a tight box around the head itself: from the top of the skull to the
+chin, ear to ear or nose to back of the head. Leave out any hat, helmet, horns, beard below the chin, and
+hair that sticks out beyond the skull (a ponytail, long hair). found=false if no head is visible."""
+
+HEAD_SCHEMA = {"type": "object", "properties": {
+    "found": {"type": "boolean"},
+    "box_2d": {"type": "array", "items": {"type": "integer"},
+               "description": "[ymin, xmin, ymax, xmax], each 0-1000 of the image"}},
+    "required": ["found", "box_2d"]}
+
+
+def head_size(img):
+    """The head's long side as a fraction of the image height, or None if not found or the check failed."""
+    from google.genai import types
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json", response_json_schema=HEAD_SCHEMA,
+        thinking_config=types.ThinkingConfig(thinking_level="low"))
+    small = img.copy()
+    small.thumbnail((768, 768))
+    try:
+        resp = gemini().models.generate_content(model=TEXT_MODEL, contents=[HEAD_PROMPT, small], config=config)
+        usage.record(TEXT_MODEL, resp)
+        r = json.loads(resp.text)
+    except Exception as e:  # a failed check shouldn't stop the build
+        log(f"    head check failed: {str(e)[:200]}")
+        return None
+    box = r.get("box_2d") or []
+    if not r.get("found") or len(box) != 4:
+        return None
+    y0, x0, y1, x1 = box
+    w, h = img.size
+    # The long side: the head's height when upright, still about right when it's tilted.
+    return max((y1 - y0) / 1000 * h, (x1 - x0) / 1000 * w) / h if y1 > y0 and x1 > x0 else None
+
+
+def read_heads(frames_dir):
+    f = frames_dir / ".heads.json"
+    return json.loads(f.read_text()) if f.exists() else {}
+
+
+def measure_heads(frames_dir, stems, placeholders=()):
+    """Measure the head in each frame that hasn't been measured since it last changed."""
+    heads = {k: v for k, v in read_heads(frames_dir).items() if k in stems}
+    todo = []
+    for stem in stems:
+        path = frames_dir / f"{stem}.png"
+        if not path.exists() or stem in placeholders:
+            continue
+        digest = hashlib.md5(path.read_bytes()).hexdigest()
+        if heads.get(stem, {}).get("md5") != digest:
+            todo.append((stem, path, digest))
+    if todo:
+        log(f"  frames: measuring the head in {len(todo)} frame(s) for the scale check")
+    for stem, path, digest in todo:
+        heads[stem] = {"md5": digest, "head": head_size(Image.open(path).convert("RGB"))}
+    if heads or (frames_dir / ".heads.json").exists():
+        (frames_dir / ".heads.json").write_text(json.dumps(heads, indent=1, sort_keys=True) + "\n")
+
+
+def head_fit(frames_dir, stem, img, fit, idle_img, idle_height, heads):
+    """(the height fit gives, the height at which the head matches the standing frame's), as fractions
+    of standing height; (None, None) if not measured. img and idle_img are background-removed, uncropped."""
+    entry, idle_entry = heads.get(stem), heads.get("idle_0")
+    if not entry or not idle_entry or not entry.get("head") or not idle_entry.get("head"):
+        return None, None
+    for name, e in ((stem, entry), ("idle_0", idle_entry)):  # measured on the frame as it is now?
+        if e["md5"] != hashlib.md5((frames_dir / f"{name}.png").read_bytes()).hexdigest():
+            return None, None
+    box = img.getbbox()
+    content = box[3] - box[1]
+    # Head size in the image vs. figure height, against the same for the standing frame: the
+    # height (as a fraction of standing) at which this frame's head matches.
+    natural = (content / idle_height) * (idle_entry["head"] * idle_img.height) / (entry["head"] * img.height)
+    current = fit[1] if fit[0] == "h" else min(fit[2], max(fit[1], content / idle_height))
+    return current, round(min(1.6, max(0.25, natural)), 2)
 
 
 # --------------------------------------------------------------------------- parse
@@ -932,6 +1088,9 @@ def stage_frames(folder, char, only, force, check=False):
     placeholders = read_placeholders(frames_dir)
     made = read_made(frames_dir)
     plan = frame_plan(char)
+    lims = limbs(folder, char)
+    if lims != (2, 2):
+        log(f"  frames: drawing and checking {lims[0]} arms and {lims[1]} legs")
     idle_path = frames_dir / "idle_0.png"
     idle_img = lambda: (Image.open(idle_path).convert("RGB")
                         if idle_path.exists() and "idle_0" not in placeholders else None)
@@ -940,7 +1099,7 @@ def stage_frames(folder, char, only, force, check=False):
         selected = not only or kind in only or stem in only
         if ANIMATIONS.get(kind, {}).get("strip"):
             if stem.endswith("_0") and (selected or not path.exists()):
-                stage_walk_strip(frames_dir, ref, made, force and selected, char)
+                stage_walk_strip(frames_dir, ref, made, force and selected, char, prompt=walk_prompt(*lims), limbs=lims)
                 write_made(frames_dir, made)
             continue
         key = frame_key(kind, data)
@@ -950,7 +1109,7 @@ def stage_frames(folder, char, only, force, check=False):
         cached = path.exists() and not force and stem not in placeholders and not changed
         if selected and cached and check and kind not in ("prop", "portrait"):
             cached_img = Image.open(path).convert("RGB")
-            problems = anatomy_problems(cached_img, data["pose"], check_arms(kind))
+            problems = anatomy_problems(cached_img, data["pose"], check_arms(kind), lims)
             problems += shape_problems(kind, cached_img, idle_img())
             if problems:
                 log(f"  frames: {stem} has {', '.join(problems)}")
@@ -985,7 +1144,7 @@ def stage_frames(folder, char, only, force, check=False):
                             "pixel size, colors and body build exactly, and keep the head the same size relative "
                             "to the body as in that sprite (small, realistic), but NOT its pose; the pose comes "
                             "only from the description below." if use_anchor else "",
-                personality=char["summary"], pose=data["pose"], expression=data["expression"],
+                personality=char["summary"], pose=data["pose"], expression=data["expression"], anatomy=anatomy_line(*lims),
                 prop_note=f"\n- include this object as part of the move: {prop}" if prop else "",
                 # Optional "proportions" in character.json corrects a reference that reads too
                 # cartoonish (e.g. an oversized head); it wins over the reference image.
@@ -996,7 +1155,7 @@ def stage_frames(folder, char, only, force, check=False):
             img = generate_image(prompt, refs)
             if kind in ("prop", "portrait"):
                 break
-            problems = anatomy_problems(img, data["pose"], check_arms(kind))
+            problems = anatomy_problems(img, data["pose"], check_arms(kind), lims)
             problems += shape_problems(kind, img, idle_img())
             if not problems:
                 break
@@ -1011,6 +1170,8 @@ def stage_frames(folder, char, only, force, check=False):
     missing = [s for s, _, _ in plan if not (frames_dir / f"{s}.png").exists()]
     if missing:
         log(f"  frames: still missing {', '.join(missing)}")
+    measure_heads(frames_dir, ["idle_0"] + [s for s, kind, _ in plan if kind in HEAD_SCALED or kind.startswith("special")],
+                  placeholders)
 
 
 # Placeholder frames are crude transforms of the reference image so the game is playable
@@ -1306,7 +1467,7 @@ def figure_rows(img):
 
 
 def stage_walk_strip(frames_dir, ref, made, force, char, prompt=WALK_STRIP_PROMPT, poses=None, rows=None,
-                     check=True):
+                     check=True, limbs=(2, 2)):
     """All of the walk's frames from one generated strip (see WALK_STRIP_PROMPT); cached like frames.
     add_campaign.py reuses it for street enemies with its own prompt, poses (one per frame, for the
     anatomy check), rows, and check=False for machines."""
@@ -1341,7 +1502,7 @@ def stage_walk_strip(frames_dir, ref, made, force, char, prompt=WALK_STRIP_PROMP
             log(f"    didn't come apart into {len(stems)} figures; " + ("trying again" if attempt < 3 else "giving up"))
             continue
         problems = [f"{st}: {', '.join(pr)}" for st, im, pose in zip(stems, parts, poses)
-                    if check and (pr := anatomy_problems(im, pose, False))]
+                    if check and (pr := anatomy_problems(im, pose, False, limbs))]
         if problems and attempt < 3:
             log(f"    {'; '.join(problems)}; trying again")
             continue
@@ -1405,10 +1566,11 @@ def stage_sheet(folder, char):
         sys.exit(f"sheet: missing {rel(frames_dir / 'idle_0.png')}; run the frames stage")
     idle = raw("idle_0")
     idle_height = idle.crop(idle.getbbox()).height
+    heads = read_heads(frames_dir)
 
     processed = {}
     for name, spec in anims.items():
-        imgs = []
+        imgs, frames = [], []
         if spec.get("optional") and not all((frames_dir / f"{name}_{i}.png").exists()
                                             for i in range(len(spec["frames"]))):
             continue  # not generated yet for this character: the game stands in a basic animation
@@ -1429,9 +1591,25 @@ def stage_sheet(folder, char):
                               for j in range(len(spec["frames"])) if j // per_row == i // per_row)
                 box = raw(f"{name}_{i}").getbbox()
                 fit = ("h", (box[3] - box[1]) / tallest)
-            if f"{name}_{i}" in char.get("frame_scale", {}):
-                fit = ("h", char["frame_scale"][f"{name}_{i}"])
-            imgs.append(fit_scale(raw(f"{name}_{i}"), fit, idle_height, base))
+            frames.append((f"{name}_{i}", raw(f"{name}_{i}"), fit))
+        if name in HEAD_SCALED or name.startswith("special"):
+            # Sized by head instead when any frame's head would be too far off: the whole animation,
+            # so its frames don't jump in size from one to the next.
+            sized = [head_fit(frames_dir, stem, frame, fit, idle, idle_height, heads) for stem, frame, fit in frames]
+            # A crouch is never taller than standing: the head measurement can run ~5% high.
+            if name.startswith("crouch"):
+                sized = [(was, natural and min(1.0, natural)) for was, natural in sized]
+            if all(natural for _, natural in sized) and any(
+                    abs(natural / was - 1) > (HEAD_TOLERANCE_CROUCH if name.startswith("crouch") else HEAD_TOLERANCE)
+                    for was, natural in sized):
+                log(f"  sheet: {name} sized by head to match the standing frame: " + ", ".join(
+                    f"{stem} {was:.2f} -> {natural:.2f}" for (stem, _, _), (was, natural) in zip(frames, sized))
+                    + " of standing height")
+                frames = [(stem, frame, ("h", natural)) for (stem, frame, _), (_, natural) in zip(frames, sized)]
+        for stem, frame, fit in frames:
+            if stem in char.get("frame_scale", {}):
+                fit = ("h", char["frame_scale"][stem])
+            imgs.append(fit_scale(frame, fit, idle_height, base))
         processed[name] = imgs
 
     palette = build_palette(processed["idle"] + processed["punch"] + processed["kick"])

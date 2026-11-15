@@ -117,6 +117,11 @@
   #fight-btn { width: 100%; margin-top: 16px; font-size: 18px; padding: 14px 28px; background: var(--red); color: #fff;
     border: 3px solid #fff; box-shadow: 4px 4px 0 #000; }
   #fight-btn:disabled { opacity: .4; cursor: default; }
+  /* Practice: right under FIGHT!, a plain button */
+  #practice-btn { width: 100%; margin-top: 10px; font-size: 13px; padding: 10px 12px; background: var(--panel);
+    color: var(--text); border: 3px solid var(--edge); box-shadow: 4px 4px 0 #000; }
+  #practice-btn:hover:not(:disabled) { border-color: var(--dim); }
+  #practice-btn:disabled { opacity: .4; cursor: default; }
   /* The opponent's campaign, when they have one: under FIGHT!, same width, quieter */
   #campaign-btn { width: 100%; margin-top: 10px; font-size: 13px; padding: 10px 12px; background: var(--panel);
     color: var(--gold); border: 3px solid var(--gold); box-shadow: 4px 4px 0 #000; line-height: 1.6; }
@@ -131,9 +136,11 @@
   #arena-preview.pop { animation: pop .18s steps(3, end); }
   @keyframes pop { from { transform: scale(.6); opacity: 0; } }
   #arena-preview .frame { position: relative; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
-  #arena-preview img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+  #arena-preview img, #arena-preview video { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+  #arena-preview video { object-position: bottom; }
+  #arena-preview img[hidden], #arena-preview video[hidden] { display: none; }
   #arena-preview .unknown { position: absolute; inset: 0; display: none; place-items: center; font-size: 36px; color: var(--dim); }
-  #arena-preview.random img { display: none; }
+  #arena-preview.random img, #arena-preview.random video { display: none; }
   #arena-preview.random .unknown { display: grid; }
   #arena-preview figcaption { font-size: 8px; color: var(--dim); margin-top: 6px; }
   #arena-preview figcaption b { color: var(--gold); font-weight: normal; }
@@ -273,7 +280,7 @@
       </div>
     </aside>
       <figure id="arena-preview" hidden>
-        <div class="frame"><img alt=""><span class="unknown">?</span></div>
+        <div class="frame"><img alt=""><video muted loop playsinline hidden></video><span class="unknown">?</span></div>
         <figcaption></figcaption>
       </figure>
       <div id="difficulty" role="radiogroup" aria-label="Opponent difficulty">
@@ -283,6 +290,7 @@
         <button data-mode="window" title="Fits in 800x600, sharp pixels">800x600</button><button data-mode="full" title="Full screen (F)">FULL SCREEN</button>
       </div>
       <button id="fight-btn" disabled>FIGHT!</button>
+      <button id="practice-btn" disabled title="No timer, no score: try out moves on the opponent">PRACTICE</button>
       <button id="campaign-btn" hidden>CAMPAIGN</button>
     </div>
   </div>

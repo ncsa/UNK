@@ -1,0 +1,38 @@
+{
+ "crouch_0": {
+  "head": 0.167,
+  "md5": "507da8f3acadbfdd734f6a10dd719fc8"
+ },
+ "crouch_block_0": {
+  "head": 0.164,
+  "md5": "c8508d6cd9566565b52a26acb5469d32"
+ },
+ "crouch_kick_0": {
+  "head": 0.179,
+  "md5": "d3607126419d96208485a697d35ccb81"
+ },
+ "crouch_kick_1": {
+  "head": 0.164,
+  "md5": "b185493a2303dac6412c117675d3c469"
+ },
+ "crouch_punch_0": {
+  "head": 0.17,
+  "md5": "d53962d7411394c07ab3133355386783"
+ },
+ "crouch_punch_1": {
+  "head": 0.167,
+  "md5": "35de4cda4f190d1249eea51642dff975"
+ },
+ "idle_0": {
+  "head": 0.174,
+  "md5": "3f76287b0a3e58d42b49934fec4039ca"
+ },
+ "special1_0": {
+  "head": 0.2,
+  "md5": "b4af1d5ba4071e88f03a0c031e56066b"
+ },
+ "special1_1": {
+  "head": 0.151,
+  "md5": "bf6fccc2a2f00d1e73964f33ebfeb1c4"
+ }
+}

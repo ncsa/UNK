@@ -24,10 +24,15 @@ if [ -f "$_UNK_DIR/gemini_key.txt" ] || [ -f "$_UNK_DIR/elevenlabs_key.txt" ]; t
   [ -f "$_UNK_DIR/gemini_key.txt" ] && export GEMINI_API_KEY="$(tr -d '\r\n' < "$_UNK_DIR/gemini_key.txt")"
   [ -f "$_UNK_DIR/elevenlabs_key.txt" ] && export ELEVENLABS_API_KEY="$(tr -d '\r\n' < "$_UNK_DIR/elevenlabs_key.txt")"
 
-  # Create the venv on first use, then activate it. A failure is reported, not fatal: this
-  # file is sourced, so it must never exit your shell.
+  # Create the venv on first use, then activate it. A venv has its folder's path written into
+  # it, so one that came along when the project folder was moved or copied doesn't work: it's
+  # rebuilt. A failure is reported, not fatal: this file is sourced, so it must never exit your shell.
+  if [ -f "$_UNK_DIR/.venv/bin/activate" ] && ! grep -qF "$_UNK_DIR/.venv" "$_UNK_DIR/.venv/bin/activate"; then
+    echo "unk: .venv was made in another folder; rebuilding it here"
+    rm -rf "$_UNK_DIR/.venv"
+  fi
   if [ ! -f "$_UNK_DIR/.venv/bin/activate" ]; then
-    echo "unk: creating the Python venv in .venv"
+    echo "unk: creating the Python venv in .venv (a minute or two)"
     python3 -m venv "$_UNK_DIR/.venv" && "$_UNK_DIR/.venv/bin/pip" install -q -r "$_UNK_DIR/requirements.txt" \
       || echo "unk: couldn't set up .venv; the game server and Docker don't need it" >&2
   fi

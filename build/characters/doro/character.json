@@ -1,0 +1,79 @@
+{
+  "name": "Doro",
+  "slug": "doro",
+  "summary": "Danny's true form, half retired deputy director of NCSA, half dragon. He is brutal!",
+  "source": {
+    "text": "Doro.txt",
+    "text_hash": "bfa524397078",
+    "parsed_text": "Danny's true form, have retired deputy director of NCSA, half dragon.  He is brutal!\n\n\nSpecial moves:\n- Stomp, leaps in the air and lands/stomps on you for massive damage.",
+    "image": "Doro.jpeg",
+    "health": 110,
+    "strength": 120,
+    "defense": 70,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 110,
+      "strength": 120,
+      "defense": 70,
+      "reason": "brutal half-dragon dragon heritage grants massive hitting power and high endurance"
+    }
+  },
+  "stats": {
+    "health": 110,
+    "punch_damage": 6,
+    "kick_damage": 8,
+    "special_damage": 17,
+    "block": 0.35,
+    "walk_speed": 2.08,
+    "jump_power": 6.4
+  },
+  "ai": {
+    "punch": 0.6,
+    "kick": 0.5,
+    "jump": 0.7,
+    "block": 0.3,
+    "special": 0.8,
+    "aggression": 0.9,
+    "mobility": 0.6
+  },
+  "expressions": {
+    "idle": "stern glare with smoke puffing from nostrils",
+    "attack": "roaring savagely with bared fangs",
+    "hit": "snarling through grit teeth",
+    "victory": "smirking triumphantly while flexed"
+  },
+  "victory_pose": "Danny rears back, spreads his draconic wings, and lets out a ferocious roar toward the sky.",
+  "taunts": [
+    "Is that all NCSA prepared you for?",
+    "You can't handle my true form!",
+    "I'll crush you into the dirt!"
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Stomp",
+      "description": "Leaps in the air and lands/stomps on you for massive damage.",
+      "input": [
+        "W",
+        "S",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "stomp",
+      "shout": "Crush!",
+      "pose_frames": [
+        "crouching very low with knees deeply bent and all four arms swung back, about to spring straight up into the air",
+        "dropping straight down out of the sky feet first: body upright and seen from the side, both legs straight down with the feet together pointed at the ground below, all four arms spread wide out to the sides, head tilted down looking at the ground beneath him"
+      ],
+      "height_ratio": 1.2,
+      "prop": null,
+      "prop_size": 1.0
+    }
+  ],
+  "warnings": [],
+  "stature": 1.4
+}

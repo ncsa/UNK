@@ -1,0 +1,98 @@
+{
+  "name": "Danny",
+  "slug": "danny",
+  "summary": "Danny is the retired deputy director of NCSA, a very blunt and no-nonsense Texan who is not to be messed with.",
+  "source": {
+    "text": "Danny.txt",
+    "text_hash": "dfa514b3f463",
+    "parsed_text": "Danny is the retired deputy director of NCSA and very very Texan.  He is not someone to be messed with, and he is very blunt to folks that annoy him.\n\n\nSpecial moves:\n- Defunded, he takes all of your funding away and tells you \"you should have gotten it in writing!\"\n- Wranglin time, he hops on a horse, puts on a cowboy had, lassos you, causing you to be unable to move for a while.",
+    "image": "Danny.jpeg",
+    "health": 110,
+    "strength": 90,
+    "defense": 100,
+    "inferred": [
+      "health",
+      "strength",
+      "defense"
+    ],
+    "inferred_stats": {
+      "health": 110,
+      "strength": 90,
+      "defense": 100,
+      "reason": "Retired director with tough, no-nonsense Texan resilience and experienced composure."
+    }
+  },
+  "stats": {
+    "health": 110,
+    "punch_damage": 4,
+    "kick_damage": 6,
+    "special_damage": 13,
+    "block": 0.5,
+    "walk_speed": 1.92,
+    "jump_power": 6.1
+  },
+  "ai": {
+    "punch": 0.6,
+    "kick": 0.4,
+    "jump": 0.2,
+    "block": 0.7,
+    "special": 0.6,
+    "aggression": 0.5,
+    "mobility": 0.4
+  },
+  "expressions": {
+    "idle": "stern unimpressed scowl",
+    "attack": "determined grit",
+    "hit": "annoyed grimace",
+    "victory": "smug chuckle with an eyebrows raise"
+  },
+  "victory_pose": "Danny adjusts his belt buckle, tips his cowboy hat, and crosses his arms with a stern nod.",
+  "taunts": [
+    "You should've gotten that in writing!",
+    "Don't mess with Texas, son.",
+    "I'm too old for this nonsense."
+  ],
+  "specials": [
+    {
+      "id": "special1",
+      "name": "Defunded",
+      "description": "He takes all of your funding away and tells you 'you should have gotten it in writing!'",
+      "input": [
+        "S",
+        "A",
+        "LMB"
+      ],
+      "input_source": "suggested",
+      "effect": "audit",
+      "shout": "You should have gotten it in writing!",
+      "pose_frames": [
+        "Danny pulls out a clipboard and taps it sternly",
+        "Danny points forcefully forward while holding the paperwork"
+      ],
+      "height_ratio": 1.0,
+      "prop": "a large government budget paper with red stamps",
+      "prop_size": 0.3
+    },
+    {
+      "id": "special2",
+      "name": "Wranglin time",
+      "description": "He hops on a horse, puts on a cowboy hat, lassos you, causing you to be unable to move for a while.",
+      "input": [
+        "A",
+        "D",
+        "RMB"
+      ],
+      "input_source": "suggested",
+      "effect": "wrangle",
+      "shout": "It's wranglin' time!",
+      "pose_frames": [
+        "riding a galloping brown horse to the right, wearing a cowboy hat, twirling a lasso overhead",
+        "riding the galloping brown horse to the right, wearing a cowboy hat, twisted around in the saddle looking back over his shoulder, throwing the lasso out behind him"
+      ],
+      "height_ratio": 1.2,
+      "prop": "a brown galloping Texan horse",
+      "prop_size": 1.2
+    }
+  ],
+  "warnings": []
+}

@@ -6,6 +6,7 @@ const W = 384, H = 224, GROUND = 210;      // GROUND = screen y of the floor
 const TICK = 1000 / 60;
 const GRAVITY = 0.32;
 const ROUND_SECONDS = 99, ROUNDS_TO_WIN = 2, MAX_ROUNDS = 5;
+const ARENA_VIDEO_VOLUME = 0.7;  // an arena video's own sound (a crowd), under the music
 const PUSH_DISTANCE = 34;                    // fighters can't overlap closer than this
 const ATTACK_KEYS = { j: "LMB", k: "RMB" };  // keyboard punch / kick, alongside the mouse buttons
 const SEQ_GAP = 450;                         // ms allowed between inputs of a special sequence
@@ -55,6 +56,20 @@ const BLAST = { thickness: 16, papers: 14 };
 // Flurry: a burst of rapid kicks, one hit every `every` ticks, edging forward to stay in range.
 // damage: the whole flurry's damage as a multiple of special_damage, if every kick lands.
 const FLURRY = { startup: 10, active: 54, recovery: 14, every: 6, hits: 8, damage: 1.3, creep: 0.7 };
+// Stomp: crouch (frame 0), leap straight up off the top of the screen, hang there while a shadow follows
+// the opponent, then drop feet first (frame 1) onto that spot. rise/fall: speed up and down (px per tick);
+// top: height off screen; hang: ticks up there, the last `lock` of them no longer following, so a quick
+// opponent can still step out of the way; reach: how close to the landing spot gets hit; damage: as a
+// multiple of special_damage; recovery: ticks crouched after landing.
+const STOMP = { rise: 13, top: 240, hang: 46, lock: 14, follow: 6, fall: 15, reach: 48, damage: 1.4, recovery: 22 };
+// Wrangle: run off the screen away from the opponent, ride back in on horseback (frame 0) twirling a lasso,
+// look back and throw it (frame 1) on passing them, ride off the other side, then run back in on foot.
+// The opponent is left roped up, unable to move, for `bound` ticks. run/ride/foot: speeds (px per tick);
+// margin: how far past the screen edge counts as gone; wait/turn: ticks off screen before riding in and
+// before running back; throwFor: ticks the throw frame shows; gap: where he stops on foot; damage: as a
+// multiple of special_damage.
+const WRANGLE = { run: 5.5, ride: 6.5, foot: 5, margin: 80, wait: 26, turn: 12, throwFor: 18, bound: 170,
+                  gap: 62, damage: 0.6 };
 // Flip: crouch, then a rising backflip kick that launches; the sprite turns a full circle in the air.
 const FLIP = { startup: 12, vy: 7.6, vx: 0.5, hitFor: 0.6 };
 // Hurricane: a hop, then spinning like a top with a leg out, travelling forward through the air and
@@ -79,6 +94,17 @@ const getJSON = url => fetch(url).then(r => { if (!r.ok) throw new Error(`${url}
 const loadImage = src => new Promise((ok, fail) => {
   const img = new Image(); img.onload = () => ok(img); img.onerror = () => fail(new Error(src)); img.src = src;
 });
+// A home arena's looping video (server.py: Characters/<Name>/<Name>.mp4), ready to draw; null if it
+// won't load in time, and the arena's image is used instead.
+const loadArenaVideo = src => new Promise(ok => {
+  const v = document.createElement("video");
+  v.loop = true; v.playsInline = true; v.preload = "auto";
+  const done = r => { clearTimeout(timer); v.onloadeddata = v.onerror = null; ok(r); };
+  const timer = setTimeout(() => done(null), 8000);
+  v.onloadeddata = () => done(v); v.onerror = () => done(null);
+  v.src = src; v.load();
+});
+const loadArena = async a => (a.video && await loadArenaVideo(a.video)) || loadImage(a.image);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -211,8 +237,8 @@ class Fighter {
 
   setState(state) {
     if (this.state === state) return;
-    if (this.state === "dizzy") this.sleepy = false;
-    if (this.special && this.state === this.special.id) { this.floating = false; this.passThrough = false; this.ghosts = []; this.cat = null; this.stopT = 0; this.auditDone = 0; }
+    if (this.state === "dizzy") { this.sleepy = false; this.roped = false; }
+    if (this.special && this.state === this.special.id) { this.away = false; this.floating = false; this.passThrough = false; this.ghosts = []; this.cat = null; this.stopT = 0; this.auditDone = 0; }
     this.state = state; this.t = 0; this.hasHit = false; this.hitCount = 0;
   }
 
@@ -248,6 +274,18 @@ class Fighter {
       anim = this.anim(s); i = this.t < ORBITAL.startup ? 0 : 1;  // keying it in, then calling it down
     } else if (s.startsWith("special") && this.special?.effect === "audit") {
       anim = this.anim(s); i = this.t < AUDIT.startup ? 0 : 1;  // typing, then holding the calculator out
+    } else if (s.startsWith("special") && this.special?.effect === "wrangle") {
+      // standing to shout, running out and back on foot, riding in on frame 0, throwing on frame 1
+      const ph = this.wrangle?.phase;
+      if (!ph) anim = this.anim("idle");
+      else if (ph === "out" || ph === "back") {
+        anim = this.anim("walk"); i = Math.floor(this.t * 2 / (60 / anim.fps));  // a run: the walk, twice as fast
+      } else { anim = this.anim(s); i = ph === "throw" ? 1 : 0; }
+    } else if (s.startsWith("special") && this.special?.effect === "stomp") {
+      // crouch to spring, the jump frame on the way up, the stomp frame coming down, crouched on landing
+      const ph = this.stomp?.phase;
+      if (ph === "rise") anim = this.anim("jump");
+      else { anim = this.anim(s); i = ph === "hang" || ph === "fall" ? 1 : 0; }
     } else if (s.startsWith("special") && this.special?.effect === "flip") {
       anim = this.anim(s); i = this.t < FLIP.startup ? 0 : 1;  // crouch, then the flip frame from take-off
     } else if (s.startsWith("special") && this.special?.effect === "flurry") {
@@ -291,6 +329,111 @@ class Fighter {
       this.facing = opp.x >= this.x ? 1 : -1;
       this.setState("jump");  // and fall
     }
+  }
+
+  updateStomp(opp, match) {
+    const t = this.t, S = SPECIAL.startup;
+    this.vx = 0;
+    if (t < S) return;                                  // crouched, about to spring
+    const st = this.stomp ??= { phase: "rise", k: 0 };
+    st.k++;
+    this.floating = true; this.vy = 0;                  // height set here, no gravity
+    if (st.phase === "rise") {
+      if (st.k === 1) { sfx("jump", { x: this.x }); sfx("kick_whoosh", { x: this.x }); this.y = 0.01; }
+      this.y += STOMP.rise;
+      this.invuln = Math.max(this.invuln, 2);
+      if (this.y >= STOMP.top) { st.phase = "hang"; st.k = 0; }
+    } else if (st.phase === "hang") {
+      this.invuln = Math.max(this.invuln, 2);
+      if (st.k < STOMP.hang - STOMP.lock) this.x += clamp(opp.x - this.x, -STOMP.follow, STOMP.follow);
+      this.facing = opp.x >= this.x ? 1 : -1;
+      if (st.k >= STOMP.hang) { st.phase = "fall"; st.k = 0; sfx("kick_whoosh", { x: this.x }); }
+    } else if (st.phase === "fall") {
+      this.passThrough = true;  // straight down onto the spot, not nudged aside by the opponent
+      this.y = Math.max(0, this.y - STOMP.fall);
+      if (this.y > 0) return;
+      st.phase = "land"; st.k = 0;
+      this.floating = false; this.passThrough = false;
+      match.shake = 14;
+      match.quakes.push({ x: this.x, t: 0 });
+      sfx("slam", { x: this.x }); sfx("hit_heavy", { x: this.x });
+      // Everyone on the ground near the landing spot is crushed; one in the air above it is clipped too.
+      if (Math.abs(opp.x - this.x) <= STOMP.reach && opp.y < 60) {
+        this.hasHit = true;
+        opp.receive(this, Math.round(this.stats.special_damage * STOMP.damage), match,
+                    { hitstun: 40, push: 4, launch: 5, level: "high" });
+      }
+    } else if (st.k >= STOMP.recovery) {
+      this.facing = opp.x >= this.x ? 1 : -1;
+      this.setState("idle");
+    }
+  }
+
+  updateWrangle(opp, match) {
+    const t = this.t, W8 = WRANGLE;
+    this.vx = 0;
+    if (t < SPECIAL.startup) return;                     // stands and shouts
+    const st = this.wrangle ??= { phase: "out", k: 0, dir: opp.x >= this.x ? -1 : 1 };
+    st.k++;
+    this.away = true; this.passThrough = true; this.invuln = Math.max(this.invuln, 2);
+    const cam = match.camX(), gone = this.x < cam - W8.margin || this.x > cam + W + W8.margin;
+    const next = phase => { st.phase = phase; st.k = 0; };
+    switch (st.phase) {
+      case "out":                                         // run off the screen, away from the opponent
+        this.facing = st.dir; this.x += st.dir * W8.run;
+        if (gone) next("wait");
+        break;
+      case "wait":
+        if (st.k >= W8.wait) { next("ride"); this.facing = -st.dir; sfx("special", { x: this.x }); }
+        break;
+      case "ride": case "throw":                          // gallop across, throwing on passing them
+        this.x += this.facing * W8.ride;
+        if (st.k % 14 === 1) sfx("land", { x: this.x });  // hoofbeats
+        if (st.phase === "ride" && Math.sign(opp.x - this.x) !== this.facing) {
+          next("throw"); sfx("throw", { x: this.x });
+          if (opp.y < 80 && !["ko", "victory", "defeat"].includes(opp.state)) {
+            opp.receive(this, Math.round(this.stats.special_damage * W8.damage), match,
+                        { stun: W8.bound, push: 0, unblockable: true });
+            st.caught = opp.state === "dizzy";  // not if they were out of reach (e.g. unhittable)
+            if (st.caught) { opp.roped = true; opp.vx = 0; opp.sleepy = false; }
+          }
+        }
+        if (st.phase === "throw" && st.k >= W8.throwFor) next("leave");
+        break;
+      case "leave":                                       // drop the rope, ride off the other side
+        this.x += this.facing * W8.ride;
+        if (gone) next("turn");
+        break;
+      case "turn":
+        if (st.k >= W8.turn) {
+          next("back"); this.facing = -this.facing;
+          st.stopX = clamp(opp.x - this.facing * W8.gap, 30, match.stageWidth - 30);
+        }
+        break;
+      case "back":                                        // run back in on foot, on the other side now
+        this.x += clamp(st.stopX - this.x, -W8.foot, W8.foot);
+        if (Math.abs(st.stopX - this.x) < 1) {
+          this.away = false; this.passThrough = false;
+          this.facing = opp.x >= this.x ? 1 : -1;
+          this.setState("idle");
+        }
+        break;
+    }
+  }
+
+  // The lasso in flight, from his hand to the opponent, while the throw frame shows (Match.draw).
+  drawLasso(ctx, camX, opp) {
+    const st = this.special?.effect === "wrangle" && this.state === this.special.id ? this.wrangle : null;
+    if (!st || st.phase !== "throw" || !st.caught) return;
+    const f = this.currentFrame(), hand = f.top || [0, -f.ay];
+    const hx = this.x + this.facing * hand[0] - camX, hy = GROUND - this.y + hand[1];
+    const box = opp.hurtBox(), ox = box.x + box.w / 2 - camX, oy = box.y + box.h * 0.45;
+    ctx.save();
+    ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + ox) / 2, Math.min(hy, oy) - 18, ox, oy); ctx.stroke();
+    ctx.strokeStyle = "#c08a4a"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + ox) / 2, Math.min(hy, oy) - 18, ox, oy); ctx.stroke();
+    ctx.restore();
   }
 
   // Dash: sprint across the whole screen through the opponent. Tornado: storm to the far side of
@@ -605,7 +748,7 @@ class Fighter {
       this.vx *= 0.82;
     }
     if (!this.airborne && this.canAct && this.state !== "walk") this.vx = 0;
-    this.x = clamp(this.x, 18, match.stageWidth - 18);
+    if (!this.away) this.x = clamp(this.x, 18, match.stageWidth - 18);  // away: off the screen in a special
   }
 
   handleInput(input, opp) {
@@ -662,6 +805,7 @@ class Fighter {
 
   startSpecial(sp) {
     this.special = sp;
+    this.stomp = null; this.wrangle = null;
     this.specialRun++;
     this.setState(sp.id);
     if (sp.cooldown) this.cooldowns[sp.id] = Math.round(sp.cooldown * 60);
@@ -675,6 +819,8 @@ class Fighter {
     const sp = this.special, t = this.t, s = SPECIAL;
     const dmg = this.stats.special_damage;
     if (sp.effect === "float") return this.updateFloat(opp, input);
+    if (sp.effect === "stomp") return this.updateStomp(opp, match);
+    if (sp.effect === "wrangle") return this.updateWrangle(opp, match);
     if (sp.effect === "charge") {
       // The vehicle (see Match.updateCharges) picks the fighter up and drops them off; this is a backstop.
       if (t === 1) match.spawnCharge(this, opp, sp);
@@ -889,6 +1035,7 @@ class Fighter {
       sfx(heavy ? "hit_heavy" : "hit_light", { x: this.x });
       match.shake = 6;
     }
+    if (match.practice) { this.health = Math.max(1, this.health); this.hurtAt = match.clock; }  // refilled in update
     if (this.health <= 0) {
       this.health = 0;
       sfx("ko", { x: this.x });
@@ -1001,6 +1148,16 @@ class Fighter {
     }
   }
 
+  // A stomp's warning: a flashing red ring on the landing spot, drawn over the fighters (Match.draw) so
+  // it shows even with the opponent standing on it.
+  drawStompMark(ctx, camX) {
+    const st = this.special?.effect === "stomp" && this.state === this.special.id ? this.stomp : null;
+    if (!st || st.phase !== "hang" || st.k % 8 >= 5) return;
+    const grow = Math.min(1, st.k / STOMP.hang), px = Math.round(this.x - camX);
+    ctx.strokeStyle = "rgba(255,60,60,0.9)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(px, GROUND - 1, 20 + 20 * grow, 6 + 3 * grow, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+
   draw(ctx, camX) {
     if (this.hidden || this.held) return;  // riding in a special's vehicle
     const f = this.currentFrame();
@@ -1012,6 +1169,13 @@ class Fighter {
     ctx.beginPath();
     ctx.ellipse(px, GROUND + 1, Math.max(10, 22 - this.y / 6), 4, 0, 0, Math.PI * 2);
     ctx.fill();
+    const stomp = this.special?.effect === "stomp" && this.state === this.special.id ? this.stomp : null;
+    if (stomp && (stomp.phase === "hang" || stomp.phase === "fall")) {
+      // where he'll land: a widening, pulsing shadow under the falling fighter
+      const grow = stomp.phase === "fall" ? 1 : Math.min(1, stomp.k / STOMP.hang);
+      ctx.fillStyle = `rgba(0,0,0,${0.25 + 0.3 * grow})`;
+      ctx.beginPath(); ctx.ellipse(px, GROUND + 1, 14 + 22 * grow, 4 + 3 * grow, 0, 0, Math.PI * 2); ctx.fill();
+    }
 
     if (this.floating && this.special?.effect !== "hurricane") {  // soft glow and rising motes under a hovering fighter
       ctx.fillStyle = `rgba(190,230,255,${0.18 + Math.sin(this.t * 0.15) * 0.06})`;
@@ -1046,7 +1210,7 @@ class Fighter {
     if (this.facing < 0) ctx.scale(-1, 1);
     const flash = this.state === "hit" && this.t < 4;
     if (flash) ctx.filter = "brightness(2.2)";
-    if (this.state === "dizzy") ctx.translate(Math.sin(this.t / 3) * 2, 0);
+    if (this.state === "dizzy") ctx.translate(this.roped ? (this.t % 12 < 2 ? 1 : 0) : Math.sin(this.t / 3) * 2, 0);
     const ext = Math.round(this.stretch);
     if (ext > 0) {
       const cut = f.ax + Math.round((f.w - f.ax) * 0.6);
@@ -1064,7 +1228,8 @@ class Fighter {
     if (inSpecial && this.cat) this.drawCat(ctx, camX, py);
     if (inSpecial && this.special.effect === "flurry") this.drawFlurry(ctx, f, px, py);
     const top = py - f.ay;
-    if (this.state === "dizzy") (this.sleepy ? drawZzz : drawDizzy)(ctx, px, top - 6, this.t);
+    if (this.state === "dizzy" && this.roped) drawRope(ctx, px, py, f.h, this.hurtBox().w, this.stunFor - this.t);
+    else if (this.state === "dizzy") (this.sleepy ? drawZzz : drawDizzy)(ctx, px, top - 6, this.t);
     if (this.shout) drawBubble(ctx, this.shout.text, px, top - 8, camX);
   }
 }
@@ -1122,6 +1287,23 @@ function drawTape(ctx, x, feetY, bodyW, left) {
     ctx.restore();
   }
   ctx.fillStyle = "#b8bcc2"; ctx.fillRect(x + w / 2 - 2, feetY - 9, 6, 3);  // loose end
+}
+
+// Coils of rope around a lassoed fighter's middle, arms pinned, with the loose end hanging down; it
+// flickers as it comes loose (left: ticks until free). Shared with the street (static/brawl.js).
+function drawRope(ctx, x, feetY, bodyH, bodyW, left) {
+  if (left < 30 && left % 8 < 4) return;
+  const w = Math.max(18, Math.round(bodyW * 0.75));
+  for (const [k, tilt] of [[0.42, 1], [0.5, -1], [0.58, 1]]) {
+    const y = Math.round(feetY - bodyH * k);
+    ctx.save(); ctx.translate(x, y); ctx.rotate(tilt * 0.1);
+    ctx.fillStyle = "#2a1a0a"; ctx.fillRect(-w / 2 - 1, -2, w + 2, 5);
+    ctx.fillStyle = "#9a6a34"; ctx.fillRect(-w / 2, -1, w, 3);
+    ctx.fillStyle = "#d0a060"; for (let i = -w / 2 + 1; i < w / 2; i += 4) ctx.fillRect(i, -1, 2, 1);  // twist
+    ctx.restore();
+  }
+  ctx.fillStyle = "#9a6a34";
+  ctx.fillRect(Math.round(x + w / 2 - 2), Math.round(feetY - bodyH * 0.42), 2, Math.round(bodyH * 0.3));  // loose end
 }
 
 function drawDizzy(ctx, x, y, t) {
@@ -1360,8 +1542,8 @@ class AI {
     if (!f.canAct) return {};
 
     const specials = f.char.specials.filter(s => f.specialReady(s));
-    const ranged = specials.filter(s => ["projectile", "beam", "audit", "orbital", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport"].includes(s.effect));
-    const close = specials.filter(s => ["melee", "flurry", "flip", "hurricane", "uppercut", "orbital", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport"].includes(s.effect));
+    const ranged = specials.filter(s => ["projectile", "beam", "audit", "orbital", "bind", "slideshow", "rain", "dash", "tornado", "cat", "stun", "charge", "abduct", "stretch", "teleport", "stomp", "wrangle"].includes(s.effect));
+    const close = specials.filter(s => ["melee", "flurry", "flip", "hurricane", "uppercut", "orbital", "bind", "float", "slideshow", "rain", "dash", "tornado", "area", "stun", "charge", "abduct", "teleport", "stomp", "wrangle"].includes(s.effect));
     const think = Math.round(rand(6, 22) * (1.3 - tr.aggression) * this.lv.think);
     let action;
     if (dist > 70) {
@@ -1501,8 +1683,10 @@ class Match {
   // to (starts: [player x, opponent x] on the stage) and with the player's health from the street.
   // stage: draws the ground instead of arenaImg, {back(ctx, camX), front(ctx, camX)} (front: in
   // front of the fighters); a campaign's mini boss is fought on the street itself this way.
+  // practice: no timer, no rounds won or lost, no score, no K.O. (health refills), specials always ready;
+  // the opponent stands still until switched to fighting back in the pause menu (T, or Y on a controller).
   constructor({ player, opponent, arena, arenaImg, onEnd, difficulty = "easy", rounds = ROUNDS_TO_WIN,
-                starts = null, health = null, stage = null }) {
+                starts = null, health = null, stage = null, practice = false }) {
     this.canvas = $("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
@@ -1510,7 +1694,13 @@ class Match {
     // The arena image's edges are the stage's hard edges. The server builds arenas at least
     // screen-wide; an older, narrower one is stretched to fill the screen rather than leaving
     // black space fighters could walk into.
-    this.arenaW = Math.max(W, arenaImg.width);
+    // A video arena (loadArena) is scaled to the screen's height, or more to fill its width, floor kept.
+    this.arenaVideo = arenaImg instanceof HTMLVideoElement ? arenaImg : null;
+    if (this.arenaVideo) {
+      const iw = arenaImg.videoWidth, ih = arenaImg.videoHeight, k = Math.max(H / ih, W / iw);
+      this.arenaW = Math.round(iw * k);
+      this.arenaSrc = [0, ih - H / k, iw, H / k];  // the bottom of the frame
+    } else this.arenaW = Math.max(W, arenaImg.width);
     this.stageWidth = this.arenaW;
     // A mirror match (a campaign mini boss who is the player's own fighter): the opponent wears
     // other colors, so you can tell them apart.
@@ -1532,20 +1722,37 @@ class Match {
     this.totalTicks = 0;
     this.debug = false;
     this.paused = false;
+    this.practice = practice;
+    this.dummy = practice;  // practice partner standing still
     this.onKey = e => {
-      if (e.key === "Escape") { this.paused = !this.paused; music.duck(this.paused); sfx("pause"); }
+      if (e.key === "Escape") {
+        this.paused = !this.paused; music.duck(this.paused); sfx("pause");
+        if (this.arenaVideo) this.paused ? this.arenaVideo.pause() : this.playVideo();
+      }
+      if (this.paused && this.practice && !e.repeat && e.key.toLowerCase() === "t") { this.dummy = !this.dummy; sfx("menu_move"); }
       if (e.key === "`") this.debug = !this.debug;
       // Sound toggles only while paused: N and M sit right under the J/K attack keys.
-      if (this.paused && e.key.toLowerCase() === "m") music.toggleMute();
+      if (this.paused && e.key.toLowerCase() === "m") {
+        music.toggleMute();
+        if (this.arenaVideo) this.arenaVideo.muted = music.muted;  // its crowd goes with the music
+      }
       if (this.paused && e.key.toLowerCase() === "n") sound.toggleMute();
       if (this.paused && e.key.toLowerCase() === "q") this.finish(true);
     };
+  }
+
+  // The arena video, with its sound unless the music is off (or the browser won't allow sound yet).
+  playVideo() {
+    const v = this.arenaVideo;
+    v.muted = music.muted; v.volume = ARENA_VIDEO_VOLUME;
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
   }
 
   start() {
     this.input.attach(this.p1);
     window.addEventListener("keydown", this.onKey);
     music.play(this.arena.music);
+    if (this.arenaVideo) { this.arenaVideo.currentTime = 0; this.playVideo(); }
     this.nextRound();
     this.last = performance.now();
     this.acc = 0;
@@ -1558,6 +1765,7 @@ class Match {
     this.input.detach();
     window.removeEventListener("keydown", this.onKey);
     music.stop();
+    if (this.arenaVideo) { this.arenaVideo.pause(); this.arenaVideo.removeAttribute("src"); this.arenaVideo.load(); }
   }
 
   nextRound() {
@@ -1568,7 +1776,7 @@ class Match {
     if (this.round === 1 && this.startHealth != null) {  // no healing on the way in
       this.p1.health = this.p1.trail = clamp(this.startHealth, 1, this.p1.stats.health);
     }
-    this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.tapes = []; this.slideshows = []; this.rains = []; this.audits = []; this.orbitals = [];
+    this.projectiles = []; this.drops = []; this.sparks = []; this.charges = []; this.abducts = []; this.puffs = []; this.glitter = []; this.quakes = []; this.tapes = []; this.slideshows = []; this.rains = []; this.audits = []; this.orbitals = [];
     this.stars = []; this.breakerBanner = null; this.flash = 0;
     this.phase = "intro"; this.phaseT = 0;
     this.timer = ROUND_SECONDS; this.timerTicks = 0;
@@ -1607,9 +1815,9 @@ class Match {
     let in1 = { move: 0 }, in2 = {};
     if (live) {
       in1 = { ...this.input.read(), ...this.input.consume(p1) };
-      in2 = this.ai.input(p1);
+      in2 = this.dummy ? {} : this.ai.input(p1);
       this.totalTicks++;
-      if (++this.timerTicks >= 60) {
+      if (!this.practice && ++this.timerTicks >= 60) {
         this.timerTicks = 0; this.timer--;
         if (this.timer > 0 && this.timer <= 10) sfx("tick");
       }
@@ -1638,9 +1846,18 @@ class Match {
     this.updateSlideshows();
     this.updateRains();
     this.puffs = this.puffs.filter(p => ++p.t < 30);
+    this.quakes = this.quakes.filter(q => ++q.t < 28);
     for (const g of this.glitter) { g.x += g.vx; g.y += g.vy; g.vy += 0.03; }
     this.glitter = this.glitter.filter(g => ++g.t < 26);
     this.separate();
+    if (this.practice) {
+      // Practice: specials are always ready, and health refills a second after the last hit (so the
+      // bar still shows what a combo took off); a hit never takes the last point, so no K.O.
+      for (const f of [p1, p2]) {
+        f.cooldown = 0; f.cooldowns = {};
+        if (f.health < f.stats.health && this.clock - (f.hurtAt || 0) > 60) f.health = f.trail = f.stats.health;
+      }
+    }
     for (const f of [p1, p2]) f.trail = Math.max(f.health, f.trail - 0.35);
     this.sparks = this.sparks.filter(s => ++s.t < 12);
     if (this.shake > 0) this.shake--;
@@ -1649,8 +1866,8 @@ class Match {
     switch (this.phase) {
       case "intro":
         // A one-round fight (a campaign's mini boss) is just a fight: no round number, no round call.
-        const single = this.roundsToWin === 1;
-        this.banner = this.phaseT < 80 ? (single ? "GET READY" : `ROUND ${this.round}`) : "FIGHT!";
+        const single = this.roundsToWin === 1 || this.practice;
+        this.banner = this.phaseT < 80 ? (this.practice ? "PRACTICE" : single ? "GET READY" : `ROUND ${this.round}`) : "FIGHT!";
         if (this.phaseT === 1) sfx("round");
         if (this.phaseT === 20 && !single) sfx(this.round === MAX_ROUNDS || (this.p1.rounds === this.roundsToWin - 1 &&
           this.p2.rounds === this.roundsToWin - 1) ? "vo_final_round" : `vo_round_${this.round}`);
@@ -1676,7 +1893,8 @@ class Match {
           if (w && w.health === w.stats.health) this.banner = "PERFECT";
         }
         if (this.phaseT === 150 && this.banner === "PERFECT") sfx("vo_perfect");
-        if (this.phaseT >= 210) {
+        if (this.phaseT >= 210 && this.practice) this.nextRound();  // practice goes on until quit
+        else if (this.phaseT >= 210) {
           const done = this.p1.rounds >= this.roundsToWin || this.p2.rounds >= this.roundsToWin || this.round >= MAX_ROUNDS;
           if (done) this.finish(false); else this.nextRound();
         }
@@ -1698,8 +1916,8 @@ class Match {
     const r1 = p1.health / p1.stats.health, r2 = p2.health / p2.stats.health;
     if (r1 > r2) winner = p1; else if (r2 > r1) winner = p2;
     this.roundWinner = winner;
-    if (winner) winner.roundHealth.push(Math.max(1, Math.round(winner.health)));
-    if (winner) winner.rounds++;
+    if (winner && !this.practice) winner.roundHealth.push(Math.max(1, Math.round(winner.health)));
+    if (winner && !this.practice) winner.rounds++;
     for (const f of [p1, p2]) if (f !== winner && f.state !== "ko") f.setState("idle");
   }
 
@@ -1774,7 +1992,9 @@ class Match {
   }
 
   camX() {
-    return clamp(Math.round((this.p1.x + this.p2.x) / 2 - W / 2), 0, this.stageWidth - W);
+    // A fighter who has left the screen in a special (WRANGLE) doesn't pull the camera after them.
+    const { p1, p2 } = this, mid = p1.away ? p2.x : p2.away ? p1.x : (p1.x + p2.x) / 2;
+    return clamp(Math.round(mid - W / 2), 0, this.stageWidth - W);
   }
 
   // Charge specials: the prop (a van, a stampede...) drives in from off screen behind the owner,
@@ -2031,7 +2251,7 @@ class Match {
   comboBreakerFx(f) {
     this.flash = 14;
     this.shake = 14;
-    this.breakerBanner = { t: 0, points: f === this.p1 };
+    this.breakerBanner = { t: 0, points: f === this.p1 && !this.practice };
     this.slowmo = BREAKER.slowmo;
     const cx = f.x, cy = GROUND - f.y - 60;
     for (let i = 0; i < 30; i++) {
@@ -2334,19 +2554,22 @@ class Match {
 
   draw() {
     const ctx = this.ctx, { p1, p2 } = this;
-    const mid = (p1.x + p2.x) / 2;
-    const camX = clamp(Math.round(mid - W / 2), 0, this.stageWidth - W);
+    const camX = this.camX();
     const shakeY = this.shake ? (this.shake % 2 ? 2 : -2) : 0;
 
     ctx.save();
     ctx.translate(0, shakeY);
     if (this.stage) this.stage.back(ctx, camX);
+    else if (this.arenaSrc) ctx.drawImage(this.arenaImg, ...this.arenaSrc, -camX, 0, this.arenaW, H);
     else ctx.drawImage(this.arenaImg, -camX, 0, this.arenaW, H);
+    if (this.practice) drawMovesCard(ctx, this.p1.char, this.dummy);
     for (const a of this.abducts) if (a.phase === "plane") this.drawVehicle(ctx, a, a.plane, 34, camX);  // behind the faller
     this.drawSlideshows(ctx);
     this.drawAudits(ctx, camX, "back");
     this.drawOrbitals(ctx, camX, "ground");
     for (const f of [p2, p1]) f.draw(ctx, camX);
+    for (const f of [p2, p1]) f.drawStompMark(ctx, camX);
+    p1.drawLasso(ctx, camX, p2); p2.drawLasso(ctx, camX, p1);
     this.stage?.front(ctx, camX);
     this.drawAudits(ctx, camX, "front");
     this.drawOrbitals(ctx, camX, "beam");
@@ -2387,6 +2610,7 @@ class Match {
       else ctx.fillRect(x, y, 2, 2);
     }
     ctx.globalAlpha = 1;
+    for (const q of this.quakes) drawQuake(ctx, q.x - camX, GROUND, q.t);  // a stomp's landing
     for (const p of this.puffs) {  // teleport particles
       for (let i = 0; i < 18; i++) {
         const ang = i * 2.4 + p.x, r = p.t * (1.2 + (i % 5) * 0.5);
@@ -2465,6 +2689,10 @@ class Match {
       outlinedText(ctx, "ESC RESUME  ·  Q QUIT  ·  F FULL SCREEN", W / 2, H / 2 + 14, "#ccc");
       outlinedText(ctx, `M MUSIC ${music.muted ? "OFF" : "ON"}  ·  N SOUND ${sound.muted ? "OFF" : "ON"}`,
                    W / 2, H / 2 + 28, "#ccc");
+      if (this.practice) {
+        outlinedText(ctx, `T (PAD Y) OPPONENT: ${this.dummy ? "STANDS STILL" : "FIGHTS BACK"}`, W / 2, H / 2 + 46,
+                     this.dummy ? "#9cf" : "#ff6b6b");
+      }
     }
   }
 
@@ -2510,13 +2738,13 @@ class Match {
       const nx = tx + (side < 0 ? 1 : -1) * (ctx.measureText(`${c.n}`).width + 5);
       ctx.font = `8px ${FONT}`;
       outlinedText(ctx, c.done ? "HIT COMBO!" : "HITS", nx, y, "#fff");
-      if (c.done && f === this.p1) outlinedText(ctx, `+${comboPoints(c.n)}`, tx, y + 12, "#7fffb2");
+      if (c.done && f === this.p1 && !this.practice) outlinedText(ctx, `+${comboPoints(c.n)}`, tx, y + 12, "#7fffb2");
     }
     // KO badge and timer
     ctx.font = `8px ${FONT}`; ctx.textAlign = "center";
     outlinedText(ctx, "KO", W / 2, top + 8, "#ff4040");
     ctx.font = `16px ${FONT}`;
-    outlinedText(ctx, String(Math.max(0, this.timer)).padStart(2, "0"), W / 2, top + 30, "#fff", 2);
+    outlinedText(ctx, this.practice ? "--" : String(Math.max(0, this.timer)).padStart(2, "0"), W / 2, top + 30, "#fff", 2);
     // Special cooldown pip for the player
     if (this.p1.char.specials.some(s => this.p1.specialReady(s)) && this.phase === "fight") {
       ctx.font = `8px ${FONT}`; ctx.textAlign = "left";
@@ -2537,10 +2765,91 @@ class Match {
   }
 }
 
+// A stomp landing: a dust ring spreading along the ground and chunks of floor kicked up. Shared with
+// the street (static/brawl.js), where y is the lane's ground line.
+function drawQuake(ctx, x, y, t) {
+  const k = t / 28;
+  ctx.save();
+  ctx.globalAlpha = 1 - k;
+  ctx.strokeStyle = "#e8dcc0"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(Math.round(x), y, 20 + 70 * k, 5 + 8 * k, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "rgba(200,185,150,0.7)";
+  for (let i = 0; i < 10; i++) {
+    const side = i % 2 ? 1 : -1, sp = 1 + (i % 5) * 0.6;
+    const cx = x + side * (10 + t * sp * 1.6), cy = y - (t * (3.2 - (i % 3)) - t * t * 0.12) * 1.4;
+    if (cy <= y) ctx.fillRect(Math.round(cx), Math.round(cy), 3, 3);
+  }
+  ctx.restore();
+}
+
 function outlinedText(ctx, text, x, y, color, width = 2) {
   ctx.lineWidth = width * 2; ctx.strokeStyle = "#000"; ctx.lineJoin = "round";
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color; ctx.fillText(text, x, y);
+}
+
+// ---------------------------------------------------------------- practice moves card
+
+// Practice mode's move list, drawn over the arena behind the fighters: the basics on the left, the
+// player's specials on the right (→ = toward the opponent). The pixel font has no arrows, so they're
+// drawn as pixels.
+const CARD_ARROW = { W: "U", A: "L", S: "D", D: "R" };
+const CARD_KEY = { LMB: "J", RMB: "K" };
+const CARD_BASICS = [
+  [["U"], "JUMP"], [["D"], "CROUCH"], [["J"], "PUNCH  ", "K", " KICK"], [["U", "+J"], "UPPERCUT"],
+  [["D", "+J/K"], "LOW ATTACK"], [["AIR ", "D", "+J/K"], "DIVE KICK"], [["HOLD ", "L"], "BLOCK"],
+  [["D", "D", "U", " ", "U", "+J"], "BREAKER"], [["LAND+J"], "RISING UPPER"],
+];
+
+function drawCardArrow(ctx, x, y, dir, color) {  // a 7x7 arrow; (x, y) top left
+  ctx.fillStyle = color;
+  const r = (a, b, w, h) => {  // in "pointing up" space, rotated to dir
+    const [px, py, pw, ph] = dir === "U" ? [a, b, w, h] : dir === "D" ? [a, 6 - b - h + 1, w, h]
+      : dir === "L" ? [b, a, h, w] : [6 - b - h + 1, a, h, w];
+    ctx.fillRect(x + px, y + py, pw, ph);
+  };
+  r(3, 0, 1, 7);                        // shaft
+  r(2, 1, 3, 1); r(1, 2, 5, 1); r(0, 3, 7, 1);  // head
+}
+
+// Draws tokens (one letter "U"/"D"/"L"/"R" = an arrow, anything else = text) from x; returns the end x.
+function drawCardTokens(ctx, tokens, x, y, color) {
+  for (const t of tokens) {
+    if (["U", "D", "L", "R"].includes(t)) { drawCardArrow(ctx, x, y - 7, t, color); x += 9; }
+    else { ctx.fillStyle = color; ctx.fillText(t, x, y); x += ctx.measureText(t).width; }
+  }
+  return x;
+}
+
+function drawMovesCard(ctx, char, still) {
+  const x0 = 14, y0 = 46, w = W - 28, h = 122, col = x0 + 182, line = 11;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(x0, y0, w, h);
+  ctx.strokeStyle = "rgba(255,210,63,0.6)"; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+  ctx.font = `8px ${FONT}`; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  const gold = "#ffd23f", text = "#ddd";
+  ctx.fillStyle = gold; ctx.fillText("MOVES", x0 + 8, y0 + 14);
+  CARD_BASICS.forEach(([keys, label, key2, label2], i) => {
+    const y = y0 + 28 + i * line;
+    let x = drawCardTokens(ctx, keys, x0 + 8, y, gold) + 6;
+    x = drawCardTokens(ctx, [label], x, y, text);
+    if (key2) drawCardTokens(ctx, [label2], drawCardTokens(ctx, [key2], x, y, gold), y, text);
+  });
+  ctx.fillStyle = gold; ctx.fillText("SPECIALS", col, y0 + 14);
+  drawCardTokens(ctx, ["R", "=TOWARD"], col + 76, y0 + 14, "#999");
+  const specials = char.specials || [], per = specials.length > 3 ? 19 : 22;  // up to 4 fit
+  specials.forEach((sp, i) => {
+    const y = y0 + 28 + i * per;
+    const keys = sp.input.map(t => CARD_ARROW[t] || CARD_KEY[t] || t);
+    drawCardTokens(ctx, keys, col, y, gold);
+    let name = sp.name.toUpperCase();
+    while (name.length > 1 && ctx.measureText(name).width > x0 + w - col - 12) name = name.slice(0, -1);
+    drawCardTokens(ctx, [name], col + 8, y + 9, text);
+  });
+  ctx.fillStyle = still ? "#9cf" : "#ff6b6b";
+  ctx.fillText(still ? "OPPONENT STANDS STILL" : "OPPONENT FIGHTS BACK", col, y0 + h - 18);
+  ctx.fillStyle = "#999"; ctx.fillText("ESC: PAUSE / SWITCH", col, y0 + h - 7);
+  ctx.restore();
 }
 
 // ---------------------------------------------------------------- menus
@@ -2618,6 +2927,8 @@ window.addEventListener("keydown", e => {
 
 function show(id) {
   for (const s of document.querySelectorAll(".screen")) s.classList.toggle("active", s.id === id);
+  const vid = document.querySelector("#arena-preview video");  // the preview plays only where it's seen
+  if (vid?.getAttribute("src")) id === "select" ? vid.play().catch(() => {}) : vid.pause();
 }
 
 function statBar(label, value, max) {
@@ -2658,6 +2969,7 @@ function select(group, value) {
   }
   if (group === "opponent") showArenaPreview(value);
   $("fight-btn").disabled = !(app.choice.player && app.arenas.length && app.characters.length > 1);
+  $("practice-btn").disabled = $("fight-btn").disabled;
   showCampaignButton();
 }
 
@@ -2697,6 +3009,11 @@ function showArenaPreview(opponent) {
   box.hidden = !app.arenas.length;
   box.classList.toggle("random", !home);
   if (home) img.src = home.image;
+  // A home arena with a video previews it, silent and looping, over the picture.
+  const vid = box.querySelector("video"), moving = !!home?.video;
+  img.hidden = moving; vid.hidden = !moving;
+  if (moving && !vid.src.endsWith(home.video)) { vid.src = home.video; vid.play().catch(() => {}); }
+  if (!moving && vid.getAttribute("src")) { vid.pause(); vid.removeAttribute("src"); vid.load(); }
   box.querySelector("figcaption").innerHTML = opponent === "random" ? "ARENA: <b>OPPONENT'S HOME</b>"
     : home ? `ARENA: <b>${esc(home.name.toUpperCase())}</b>`
     : `ARENA: <b>RANDOM</b>${opp ? ` · ${esc(opp.name.toUpperCase())} HAS NO HOME` : ""}`;
@@ -2779,28 +3096,35 @@ async function getCharacter(slug) {
   return app.loaded[slug];
 }
 
-async function startMatch(arena) {
+// practice: no timer or score; quitting goes straight back to the menu (see Match).
+async function startMatch(arena, practice = false) {
   const { player } = app.choice;
   let opponent = app.choice.opponent;
   if (opponent === "random") {
     const others = app.characters.filter(c => c.slug !== player);
     opponent = others[Math.floor(Math.random() * others.length)].slug;
   }
-  $("fight-btn").disabled = true;
-  $("fight-btn").textContent = "LOADING...";
+  const btn = $(practice ? "practice-btn" : "fight-btn"), label = btn.textContent;
+  $("fight-btn").disabled = $("practice-btn").disabled = true;
+  btn.textContent = "LOADING...";
   try {
     const a = app.arenas.find(x => x.slug === arena) || arenaFor(opponent);
-    const [pc, oc, img] = await Promise.all([getCharacter(player), getCharacter(opponent), loadImage(a.image), document.fonts.ready]);
+    const [pc, oc, img] = await Promise.all([getCharacter(player), getCharacter(opponent), loadArena(a), document.fonts.ready]);
     show("fight");
-    app.lastMatch = { player, opponent, arena: a.slug, difficulty: app.difficulty };
-    app.match = new Match({ player: pc, opponent: oc, arena: a, arenaImg: img, onEnd: r => endMatch(r, pc, oc),
-                           difficulty: app.difficulty });
+    if (practice) {
+      app.match = new Match({ player: pc, opponent: oc, arena: a, arenaImg: img, difficulty: app.difficulty,
+                             practice: true, onEnd: () => { app.match = null; showMenu(); } });
+    } else {
+      app.lastMatch = { player, opponent, arena: a.slug, difficulty: app.difficulty };
+      app.match = new Match({ player: pc, opponent: oc, arena: a, arenaImg: img, onEnd: r => endMatch(r, pc, oc),
+                             difficulty: app.difficulty });
+    }
     app.match.start();
   } catch (e) {
     alert(`Could not load the match: ${e.message}`);
   } finally {
-    $("fight-btn").disabled = false;
-    $("fight-btn").textContent = "FIGHT!";
+    $("fight-btn").disabled = $("practice-btn").disabled = false;
+    btn.textContent = label;
   }
 }
 
@@ -2914,6 +3238,7 @@ async function endMatch(result, pc, oc, run = null) {
 }
 
 $("fight-btn").onclick = () => { sfx("menu_select"); startMatch(); };
+$("practice-btn").onclick = () => { sfx("menu_select"); startMatch(undefined, true); };
 $("campaign-btn").onclick = () => { sfx("menu_select"); if (currentCampaign()) startCampaign(currentCampaign()); };
 
 // Difficulty picker on the selection screen; remembered per browser.

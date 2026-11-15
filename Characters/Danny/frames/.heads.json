@@ -1,0 +1,46 @@
+{
+ "crouch_0": {
+  "head": 0.161,
+  "md5": "b7428b3fc71d1741ef2de50f625f29a5"
+ },
+ "crouch_block_0": {
+  "head": 0.161,
+  "md5": "69f4af0bd8a37b2ab3a94d3ac13a1549"
+ },
+ "crouch_kick_0": {
+  "head": 0.178,
+  "md5": "e4ada3c79d0303a889f94c7ee6dbd784"
+ },
+ "crouch_kick_1": {
+  "head": 0.2,
+  "md5": "0a92b1b13b25c6395d61fe1d5158caf6"
+ },
+ "crouch_punch_0": {
+  "head": 0.157,
+  "md5": "8a24e8696866909b7ced0e3331a82ebc"
+ },
+ "crouch_punch_1": {
+  "head": 0.152,
+  "md5": "e9591ff722545578cc0ccf0d4063fef0"
+ },
+ "idle_0": {
+  "head": 0.159,
+  "md5": "443047e8f3f17a4970d5571e366fe1f8"
+ },
+ "special1_0": {
+  "head": 0.159,
+  "md5": "e4e57e7aed257311444db5b513b6f94d"
+ },
+ "special1_1": {
+  "head": 0.177,
+  "md5": "dc272d5dbf769dc7b08e7ee03021eafb"
+ },
+ "special2_0": {
+  "head": 0.086,
+  "md5": "2d55396216908568a4cfa7bcc2b24108"
+ },
+ "special2_1": {
+  "head": 0.075,
+  "md5": "5366cf503901fc50a164d22ff5bdc167"
+ }
+}

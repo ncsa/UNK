@@ -58,11 +58,16 @@ const STREET_WAKEUP = { early: 14, late: 8, jump: 6, invuln: 40 };
 //            teleport (behind the nearest enemy first)
 //   area     a spin that hits everyone around
 //   float    rise out of reach, drift, and come down with a slam (Left Shift drops early)
+//   wrangle  run off the screen behind, ride back through the lane on horseback lassoing everyone in it
+//            (left roped up, unable to move), ride off ahead, then run back in on foot
+//   stomp    leap off the top of the screen, follow the nearest enemy, and land on them feet first,
+//            crushing everyone around the landing spot
 //   abduct   the nearest enemy is magicked into the air
 const STREET_SPECIALS = {
   projectile: "shot", bind: "shot", cat: "shot", beam: "beam", audit: "audit", orbital: "orbital", rain: "rain",
   slideshow: "daze", stun: "daze", dash: "dash", tornado: "dash", charge: "van", melee: "strike", uppercut: "strike",
   flip: "strike", hurricane: "dash", stretch: "strike", flurry: "strike", teleport: "strike", area: "area", float: "float", abduct: "abduct",
+  stomp: "stomp", wrangle: "wrangle",
 };
 // The stretching kick (stretch specials) on the street: how far the leg can reach past its drawing,
 // how far when no one is ahead, and how many ticks it stays out.
@@ -181,6 +186,17 @@ class Hero extends Brawler {
       if (this.t < SPECIAL.startup && !fire) return frameOf(this.anim("idle"), 0, 0);
       return frameOf(this.anim(this.sp.id), 0, this.t < SPECIAL.startup ? 0 : fire);
     }
+    if (s === "special" && this.sp.effect === "wrangle") {  // as in a match (WRANGLE, game.js)
+      const ph = this.wrangle?.phase;
+      if (!ph) return frameOf(this.anim("idle"), 0, 0);
+      if (ph === "out" || ph === "back") return frameOf(this.anim("walk"), this.t * 2);
+      return frameOf(this.anim(this.sp.id), 0, this.throwUntil > this.t ? 1 : 0);
+    }
+    if (s === "special" && this.sp.effect === "stomp") {  // as in a match: rising on the jump frame
+      const ph = this.stomp?.phase;
+      if (ph === "rise") return frameOf(this.anim("jump"), 0, 0);
+      return frameOf(this.anim(this.sp.id), 0, ph === "hang" || ph === "fall" ? 1 : 0);
+    }
     if (s === "special") return frameOf(this.anim(this.sp.id), 0, this.t < SPECIAL.startup ? 0 : 1);
     if (["fall", "down", "dead"].includes(s)) return frameOf(this.anim("ko"), 0, 0);
     if (s === "getup") return frameOf(this.anim("crouch"), 0, 0);
@@ -284,9 +300,13 @@ class Street {
   press(what, more = {}) { this.pending = { what, until: this.clock + 9, ...more }; }
 
   // Special inputs are written for facing right (D = forward); facing left, A and D swap, as in a match.
+  // On the street a direction also turns the hero, so a whole sequence is read against the way they
+  // faced when it began (a token more than SEQ_GAP after the last starts a new one): otherwise back,
+  // forward, kick turns them on "back" and reads "forward" as back again.
   pushToken(token) {
-    if (this.hero.facing < 0) token = { A: "D", D: "A" }[token] || token;
-    const now = performance.now();
+    const now = performance.now(), last = this.buffer[this.buffer.length - 1];
+    if (!last || now - last.time > SEQ_GAP) this.seqFacing = this.hero.facing;
+    if (this.seqFacing < 0) token = { A: "D", D: "A" }[token] || token;
     this.buffer.push({ token, time: now });
     this.buffer = this.buffer.filter(b => now - b.time < 2000).slice(-10);
   }
@@ -655,7 +675,7 @@ class Street {
       }
     }
     h.z = clamp(h.z, this.top, this.bottom);
-    h.x = clamp(h.x, this.camX + 14, Math.min(this.camX + W - 14, this.bossAt.x - 70,
+    if (!(h.state === "special" && h.wrangle)) h.x = clamp(h.x, this.camX + 14, Math.min(this.camX + W - 14, this.bossAt.x - 70,
                                               this.mini && !this.mini.done ? this.mini.x - 50 : Infinity));
   }
 
@@ -776,10 +796,11 @@ class Street {
   // Damage an enemy: knocked down by a knockdown move, a fourth hit in a row or running out of health;
   // otherwise it flinches (stun: ticks), or is left dizzy (daze: ticks) or launched (launch: speed up).
   // fling: how fast a launched enemy flies sideways.
-  damage(e, amount, dir, { knock = false, stun = 16, push = 1.5, daze = 0, launch = 0, fling = 1.2, taped = false } = {}) {
+  damage(e, amount, dir, { knock = false, stun = 16, push = 1.5, daze = 0, launch = 0, fling = 1.2, taped = false, roped = false } = {}) {
     const h = this.hero;
     if (!e.hittable && e.state !== "dizzy") return false;
     e.hp -= amount;
+    e.roped = false;  // any hit frees a roped enemy (set again below if this is the lasso)
     this.lastEnemy = e;
     sfx(knock || launch ? "hit_heavy" : "hit_light", { x: e.x });
     h.combo++; h.comboLast = this.clock;
@@ -791,7 +812,7 @@ class Street {
     } else if (knock || e.hp <= 0 || e.stagger >= 4) {
       e.stagger = 0; e.fallFrom(dir, e.kind.heavy ? 1.4 : 2.6); this.shake = 6;
     } else if (daze) {
-      e.setState("dizzy"); e.stunFor = daze; e.taped = taped;
+      e.setState("dizzy"); e.stunFor = daze; e.taped = taped; e.roped = roped;
     } else {
       e.setState("hit"); e.stun = stun; e.x += dir * push;
     }
@@ -832,7 +853,7 @@ class Street {
 
   startSpecial(sp) {
     const h = this.hero;
-    h.setState("special"); h.sp = sp; h.vx = 0; h.chain = 0; h.stretch = 0;
+    h.setState("special"); h.sp = sp; h.vx = 0; h.chain = 0; h.stretch = 0; h.stomp = null; h.wrangle = null; h.throwUntil = 0;
     h.cooldowns[sp.id] = this.clock + (sp.cooldown ? Math.round(sp.cooldown * 60) : SPECIAL.cooldown);
     h.shout = { text: sp.shout || sp.name, t: 90 };
     sfx("special", { x: h.x });
@@ -938,6 +959,71 @@ class Street {
         }
         if (t >= S + 180 || (t > S + 30 && inp.crouch)) {  // come down with a dive
           h.setState("dive_kick"); h.vh = -4.5; h.vx = h.facing * 2;
+        }
+        return;
+      }
+      case "wrangle": {
+        // As in a match (WRANGLE, game.js), along the lane: everyone in it is roped up as he rides past.
+        if (t < S) return;
+        const st = h.wrangle ??= { phase: "out", k: 0, dir: -h.facing, roped: new Set() };
+        st.k++;
+        h.invuln = Math.max(h.invuln, 2);
+        const gone = h.x < this.camX - WRANGLE.margin || h.x > this.camX + W + WRANGLE.margin;
+        const next = phase => { st.phase = phase; st.k = 0; };
+        if (st.phase === "out") {
+          h.facing = st.dir; h.x += st.dir * WRANGLE.run;
+          if (gone) next("wait");
+        } else if (st.phase === "wait") {
+          if (st.k >= WRANGLE.wait) { next("ride"); h.facing = -st.dir; sfx("special", { x: h.x }); }
+        } else if (st.phase === "ride") {
+          h.x += h.facing * WRANGLE.ride;
+          if (st.k % 14 === 1) sfx("land", { x: h.x });
+          for (const e of this.enemies)
+            if (this.canHit(e) && !st.roped.has(e) && Math.abs(e.z - h.z) <= 30 && Math.sign(e.x - h.x) !== h.facing) {
+              st.roped.add(e); h.throwUntil = h.t + WRANGLE.throwFor;
+              this.damage(e, dmg * WRANGLE.damage, h.facing, { daze: WRANGLE.bound + 30, roped: true });
+              this.fx.push({ type: "lasso", target: e, t: 0 }); sfx("throw", { x: h.x });
+            }
+          if (st.k > 20 && gone) next("turn");
+        } else if (st.phase === "turn") {
+          if (st.k >= WRANGLE.turn) {
+            next("back"); h.facing = -h.facing;
+            st.stopX = h.facing > 0 ? this.camX + 60 : this.camX + W - 60;
+          }
+        } else if (st.phase === "back") {
+          h.x += clamp(st.stopX - h.x, -WRANGLE.foot, WRANGLE.foot);
+          if (Math.abs(st.stopX - h.x) < 1) { h.wrangle = null; h.setState("idle"); }
+        }
+        return;
+      }
+      case "stomp": {
+        // As in a match (STOMP, game.js): up off the screen, follow the nearest enemy, drop on them.
+        if (t < S) return;
+        const st = h.stomp ??= { phase: "rise", k: 0, target: this.nearest(W) };
+        st.k++;
+        h.invuln = Math.max(h.invuln, 2);
+        if (st.phase === "rise") {
+          if (st.k === 1) { sfx("jump", { x: h.x }); sfx("kick_whoosh", { x: h.x }); }
+          h.h += STOMP.rise;
+          if (h.h >= STOMP.top) { st.phase = "hang"; st.k = 0; }
+        } else if (st.phase === "hang") {
+          const tg = st.target && this.enemies.includes(st.target) && this.canHit(st.target) ? st.target : null;
+          if (tg && st.k < STOMP.hang - STOMP.lock) {
+            h.x += clamp(tg.x - h.x, -STOMP.follow, STOMP.follow);
+            h.z = clamp(h.z + clamp(tg.z - h.z, -STOMP.follow, STOMP.follow), this.top, this.bottom);
+            h.facing = tg.x >= h.x ? 1 : -1;
+          }
+          if (st.k >= STOMP.hang) { st.phase = "fall"; st.k = 0; sfx("kick_whoosh", { x: h.x }); }
+        } else if (st.phase === "fall") {
+          h.h = Math.max(0, h.h - STOMP.fall);
+          if (h.h === 0) {
+            st.phase = "land"; st.k = 0;
+            for (const e of this.around(h.x, h.z, STOMP.reach + 8, 24)) this.damage(e, dmg * STOMP.damage, e.x >= h.x ? 1 : -1, { knock: true });
+            this.fx.push({ type: "quake", x: h.x, z: h.z, t: 0 });
+            this.shake = 12; sfx("slam", { x: h.x }); sfx("hit_heavy", { x: h.x });
+          }
+        } else if (st.k >= STOMP.recovery) {
+          h.stomp = null; h.setState("idle");
         }
         return;
       }
@@ -1165,6 +1251,20 @@ class Street {
             ctx.drawImage(f.img, Math.round(e.x - cx - w / 2), Math.round(y), w, 34);
           }
           break;
+        case "quake":
+          if (f.t < 28) drawQuake(ctx, x, f.z, f.t);
+          break;
+        case "lasso": {  // the rope from his hand to the one just caught, for a moment
+          const e = f.target, fr = h.frame(), hand = fr.top || [0, -fr.ay];
+          if (f.t > 16 || !e) break;
+          const hx = h.x - cx + h.facing * hand[0], hy = h.z - h.h + hand[1];
+          const ex = e.x - cx, ey = e.z - e.frame().h * 0.5;
+          ctx.strokeStyle = "#5a3a1a"; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + ex) / 2, Math.min(hy, ey) - 16, ex, ey); ctx.stroke();
+          ctx.strokeStyle = "#c08a4a"; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(hx, hy); ctx.quadraticCurveTo((hx + ex) / 2, Math.min(hy, ey) - 16, ex, ey); ctx.stroke();
+          break;
+        }
         case "puff":
           ctx.fillStyle = `rgba(230,230,255,${1 - f.t / 40})`;
           for (let i = 0; i < 8; i++) {
@@ -1186,7 +1286,7 @@ class Street {
 
   updateWaves() {
     const h = this.hero, L = this.level;
-    if (this.lock === null) {
+    if (this.lock === null && !(h.state === "special" && h.wrangle)) {  // holds still while he's off wrangling
       // Only forward. After a wave or a mini boss fight the hero may stand well ahead of where the
       // camera follows from; it catches up gently rather than jumping or hurrying there: a pixel a
       // frame on its own, a pixel a frame faster than the hero while they walk forward. Walking only
@@ -1243,7 +1343,7 @@ class Street {
       e.lift = e.down ? 0 : (e.lift || 0) + (want - (e.lift || 0)) * 0.12;
     }
     if (e.down) { e.updateDown(this); if (e.state === "idle") e.setState("approach"); return; }
-    if (e.state === "dizzy") { if (e.t >= e.stunFor) { e.taped = false; e.setState("approach"); } return; }
+    if (e.state === "dizzy") { if (e.t >= e.stunFor) { e.taped = false; e.roped = false; e.setState("approach"); } return; }
     const toward = h.x >= e.x ? 1 : -1;
     e.moving = false;
     const walk = (tx, tz) => {
@@ -1309,7 +1409,7 @@ class Street {
         }
         break;
       case "block": if (e.t >= 34) e.setState("approach"); break;
-      case "dizzy": e.moving = false; if (e.t >= e.stunFor) { e.taped = false; e.setState("approach"); } break;
+      case "dizzy": e.moving = false; if (e.t >= e.stunFor) { e.taped = false; e.roped = false; e.setState("approach"); } break;
       case "hit": if (e.t >= (e.stun || 16)) { e.setState("approach"); e.cooldown = Math.max(e.cooldown, 20); } break;
     }
     if (this.clock - (e.lastHitT || 0) > 90) e.stagger = 0;
@@ -1394,12 +1494,18 @@ class Street {
       }
       drawFrame(ctx, img, a.frame(), a.x - cx, a.z - a.h - (a.lift || 0), a.facing, fade);
     }
+    if (h.state === "special" && h.stomp?.phase === "hang" && h.stomp.k % 8 < 5) {  // a stomp's landing spot
+      const grow = Math.min(1, h.stomp.k / STOMP.hang);
+      ctx.strokeStyle = "rgba(255,60,60,0.9)"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(Math.round(h.x - cx), Math.round(h.z), 20 + 16 * grow, 6 + 2 * grow, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     for (const s of this.shots) this.drawShot(ctx, s, cx);
     this.drawFx(ctx, cx);
     for (const e of this.enemies) if (e.state === "dizzy") {
       const f = e.frame();
       if (e.taped) drawTape(ctx, Math.round(e.x - cx), Math.round(e.z), f.w, e.stunFor - e.t);
-      drawDizzy(ctx, Math.round(e.x - cx), Math.round(e.z - f.ay - 4), this.clock);
+      if (e.roped) drawRope(ctx, Math.round(e.x - cx), Math.round(e.z - e.h), f.h, f.w, e.stunFor - e.t);
+      else drawDizzy(ctx, Math.round(e.x - cx), Math.round(e.z - f.ay - 4), this.clock);
     }
     // kept below the health bars when the hero is high in the air
     if (h.shout) drawBubble(ctx, h.shout.text, Math.round(h.x - cx), Math.max(60, Math.round(h.z - h.h - h.frame().ay - 6)));

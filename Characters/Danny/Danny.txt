@@ -1,0 +1,19 @@
+# Profile for Danny. Fill this in, then run add_character.py again: only what changed is
+# rebuilt. Lines starting with # are ignored. Replace the line below with a sentence or two on
+# personality and fighting style, e.g. "Grumpy and rude. Mostly punches, jumps rarely."
+Danny is the retired deputy director of NCSA and very very Texan.  He is not someone to be messed with, and he is very blunt to folks that annoy him.
+
+# Health, strength and defense are worked out from the description above (sharing 300 points,
+# so nobody is simply better). To set any yourself, remove the # from its line and change it:
+# Health: 100
+# Strength: 100
+# Defense: 100
+
+Special moves:
+# Up to 4, one per line starting with "- ". Each needs only a name and what happens; a button
+# sequence that suits the move is picked for you. To choose your own, end the line with one:
+# directions are relative to the opponent (D toward them, A away, W up, S down), then punch
+# (left click or J) or kick (right click or K). e.g.
+# - Giant denied stamp, stomps the opponent with an enormous DENIED stamp, yelling "DENIED!!".
+- Defunded, he takes all of your funding away and tells you "you should have gotten it in writing!"
+- Wranglin time, he hops on a horse, puts on a cowboy had, lassos you, causing you to be unable to move for a while.

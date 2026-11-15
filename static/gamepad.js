@@ -10,7 +10,7 @@
 //   A  jump             A  jump                                          any  skip splash / scores
 //   B  kick             B  block
 //   RB block (hold back is still the usual way)   LB  crouch
-//   Start  pause        View (in pause)  quit to menu
+//   Start  pause        View (in pause)  quit to menu    Y (in practice's pause)  opponent still/fights
 
 const PAD = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8, START: 9, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 const STICK_DEAD = 0.5;
@@ -19,7 +19,7 @@ const KEY = {  // what a synthetic key press carries: key (for e.key) and code (
   up: ["ArrowUp", "ArrowUp"], down: ["ArrowDown", "ArrowDown"], left: ["ArrowLeft", "ArrowLeft"],
   right: ["ArrowRight", "ArrowRight"], punch: ["j", "KeyJ"], kick: ["k", "KeyK"], jumpKey: ["w", "KeyW"],
   space: [" ", "Space"], block: ["l", "KeyL"], crouch: ["Shift", "ShiftLeft"], escape: ["Escape", "Escape"],
-  enter: ["Enter", "Enter"], quit: ["q", "KeyQ"],
+  enter: ["Enter", "Enter"], quit: ["q", "KeyQ"], switchDummy: ["t", "KeyT"],
 };
 
 const pad = { held: new Map(), prev: [], navPrev: {}, rest: {} };  // held: our name -> the key we pressed for it
@@ -37,7 +37,8 @@ function padBindings() {
   const street = typeof Street !== "undefined" && app.match instanceof Street;
   return {
     up: KEY.up, down: KEY.down, left: KEY.left, right: KEY.right,
-    [PAD.X]: KEY.punch, [PAD.Y]: KEY.kick,
+    // Y switches a practice partner between standing still and fighting back, in the pause menu.
+    [PAD.X]: KEY.punch, [PAD.Y]: app.match?.practice && app.match.paused ? KEY.switchDummy : KEY.kick,
     [PAD.A]: street ? KEY.space : KEY.jumpKey,
     [PAD.B]: street ? KEY.block : KEY.kick,
     [PAD.LB]: street ? KEY.crouch : null, [PAD.LT]: street ? KEY.crouch : null,

@@ -14,7 +14,9 @@ it, e.g. a forgotten password:  python server.py --reset-password NAME
 
 Characters appear once add_character.py has built them into build/characters/.
 A character's home arena is the Arena_* image in its Characters/<Name>/ folder, with
-<Name>.mp3 as its music; matches against that character are fought there. Images in Arenas/
+<Name>.mp3 as its music; matches against that character are fought there. An optional
+<Name>.mp4 (or .webm) in the same folder plays behind those matches instead of the image,
+looping, with its own sound; the image is still the preview and the campaign's arena. Images in Arenas/
 (with an optional same-named .mp3) are used for opponents without one. A game-sized copy of
 each arena is made on first request.
 """
@@ -58,6 +60,7 @@ ARENA_MIN_WIDTH = 384  # the arena's edges are the stage's edges, so it must fil
 THUMB_WIDTH = 192
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 AUDIO_EXTS = {".mp3", ".ogg", ".m4a", ".wav"}
+VIDEO_EXTS = {".mp4", ".webm"}
 
 app = FastAPI(title="UNK Fighter", docs_url=None, redoc_url=None)
 
@@ -242,26 +245,27 @@ def arena_name(path):
     return stem[6:] if stem.lower().startswith("arena_") else stem
 
 
-def find_audio(folder, stem):
-    """<stem>.<audio ext> in folder, if any."""
+def find_audio(folder, stem, exts=AUDIO_EXTS):
+    """<stem>.<audio ext> in folder, if any (exts=VIDEO_EXTS: a video)."""
     return next((p for p in sorted(folder.iterdir())
-                 if p.suffix.lower() in AUDIO_EXTS and p.stem.lower() == stem.lower()), None)
+                 if p.suffix.lower() in exts and p.stem.lower() == stem.lower()), None)
 
 
 def arena_sources():
-    """slug -> (source image, display name, home character slug or None, music or None)."""
+    """slug -> (source image, display name, home character slug or None, music or None, video or None)."""
     out = {}
     if ARENA_DIR.exists():
         for p in sorted(ARENA_DIR.iterdir()):
             if p.suffix.lower() in IMAGE_EXTS:
-                out[slugify(arena_name(p))] = (p, arena_name(p), None, find_audio(ARENA_DIR, p.stem))
+                out[slugify(arena_name(p))] = (p, arena_name(p), None, find_audio(ARENA_DIR, p.stem), None)
     if CHAR_DIR.exists():
         for folder in sorted(CHAR_DIR.iterdir()):
             homes = sorted(p for p in folder.glob("[Aa]rena_*") if p.suffix.lower() in IMAGE_EXTS) \
                 if folder.is_dir() else []
             if homes:  # same slug rule as add_character.py, so it matches build/characters/<slug>
                 char = slugify(folder.name)
-                out[f"{char}_home"] = (homes[0], arena_name(homes[0]), char, find_audio(folder, folder.name))
+                out[f"{char}_home"] = (homes[0], arena_name(homes[0]), char, find_audio(folder, folder.name),
+                                       find_audio(folder, folder.name, VIDEO_EXTS))
     return out
 
 
@@ -288,13 +292,14 @@ def build_arena(slug, src):
 @app.get("/api/arenas")
 def list_arenas():
     out = []
-    for slug, (src, name, home, music) in arena_sources().items():
+    for slug, (src, name, home, music, video) in arena_sources().items():
         full, _ = build_arena(slug, src)
         with Image.open(full) as im:
             size = im.size
         out.append({"slug": slug, "name": name, "home": home, "width": size[0], "height": size[1],
                     "image": f"/assets/arenas/{slug}.png", "thumb": f"/assets/arenas/{slug}_thumb.png",
-                    "music": f"/assets/music/{slug}{music.suffix.lower()}" if music else None})
+                    "music": f"/assets/music/{slug}{music.suffix.lower()}" if music else None,
+                    "video": f"/assets/arena-video/{slug}{video.suffix.lower()}" if video else None})
     return out
 
 
@@ -377,6 +382,15 @@ def arena_music(name: str):
     if not src or not src[3]:
         raise HTTPException(404)
     return FileResponse(src[3])
+
+
+@app.get("/assets/arena-video/{name}")
+def arena_video(name: str):
+    """A home arena's looping video (FileResponse answers the range requests browsers stream video with)."""
+    src = arena_sources().get(Path(name).stem)
+    if not src or not src[4]:
+        raise HTTPException(404)
+    return FileResponse(src[4])
 
 
 @app.get("/api/sounds")

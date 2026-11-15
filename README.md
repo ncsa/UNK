@@ -83,7 +83,7 @@ Fighters are generated with Google's Gemini image models, so these tools need a 
    .venv/bin/python add_character.py Characters/<Name>
    ```
 
-3. Optional extras in the same folder: `Arena_<Place>.jpg` is their home arena and `<Name>.mp3` its music.
+3. Optional extras in the same folder: `Arena_<Place>.jpg` is their home arena and `<Name>.mp3` its music. A `<Name>.mp4` plays behind matches in that arena instead of the picture, looping, with its own sound (the picture is still needed for the preview and campaigns).
 
 The tool works in stages:
 
