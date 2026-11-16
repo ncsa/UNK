@@ -14,7 +14,7 @@ someone new to the roster is one command.
 - **Special moves** made from each fighter's description, with their own inputs, props and shouts
 - **Combos, combo breakers and the rising uppercut**, plus three CPU difficulty levels
 - **Arcade high scores** with initials, logins per player, and a guest account
-- **Keyboard, mouse or Xbox-style controller**; an 800×600 window or full screen, always with sharp pixels
+- **Keyboard, mouse, Xbox-style controller or touch screen**; an 800×600 window or full screen, always with sharp pixels
 
 The game draws at 384×224 (SNES height, widescreen width) and scales up by whole multiples.
 
@@ -69,6 +69,11 @@ To run it with Docker instead, or to put it on a server with HTTPS, see **[DEPLO
 - **Rising uppercut**: knocked down or launched? Punch just as you land or get up
 - **Specials**: each fighter's inputs are listed on the select screen (→ means toward the opponent)
 - **Combos**: hits landed back to back score more the longer the chain
+
+**On a phone or tablet** (`static/touch.js`), play sideways: the left thumb is a pad (put it down anywhere
+on the left half and slide), the round buttons on the right punch, kick and jump (and block on the
+street), and each special has its own button that does the whole move in one tap. II pauses. Android
+goes full screen when a fight starts; on an iPhone, use Share → Add to Home Screen to play full screen.
 
 ## Adding a fighter
 
@@ -128,7 +133,7 @@ are processed to sound like SNES samples. Your own recordings can replace any of
 | Path | What it is |
 |---|---|
 | `server.py` | FastAPI server: logins, rosters, arenas, campaigns, high scores |
-| `static/` | The game: `game.js` (matches), `brawl.js` (campaigns), `sound.js`, `gamepad.js`, `index.html` |
+| `static/` | The game: `game.js` (matches), `brawl.js` (campaigns), `sound.js`, `gamepad.js`, `touch.js`, `index.html`, `manifest.json` |
 | `add_character.py` | Builds a fighter from a photo and a description |
 | `add_campaign.py` | Builds a campaign level for a fighter |
 | `make_sounds.py` | Generates the sound effects and announcer |

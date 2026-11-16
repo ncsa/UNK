@@ -107,5 +107,9 @@
       "prop_size": 0.5
     }
   ],
-  "warnings": []
+  "warnings": [],
+  "frame_scale": {
+    "special3_0": 0.763,
+    "special3_1": 1.0
+  }
 }

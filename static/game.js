@@ -74,7 +74,7 @@ const WRANGLE = { run: 5.5, ride: 6.5, foot: 5, margin: 80, wait: 26, turn: 12, 
 const FLIP = { startup: 12, vy: 7.6, vx: 0.5, hitFor: 0.6 };
 // Hurricane: a hop, then spinning like a top with a leg out, travelling forward through the air and
 // kicking whoever it passes several times; lands where it ends up.
-const HURRICANE = { startup: 10, air: 46, height: 26, speed: 2.6, every: 8, hits: 4, damage: 1.4 };
+const HURRICANE = { startup: 10, air: 46, height: 26, speed: 2.6, every: 8, hits: 4, damage: 1.4, minWidth: 0.6 };
 // Audit: tap away at a calculator, then a fan of red figures sprays across the screen (block it).
 // If it reaches the opponent their money bursts out of their pockets and whirls around them for
 // `whirl` ticks, hitting them `whirlHits` times (unblockable), before it blows away.
@@ -1063,7 +1063,8 @@ class Fighter {
     };
     swirl(false);
     ctx.translate(px, py);
-    ctx.scale((Math.abs(sx) < 0.25 ? 0.25 : Math.abs(sx)) * (sx >= 0 ? 1 : -1) * this.facing, 1);
+    // Turning: narrowed side-on, but never below HURRICANE.minWidth, or he reads as shrunk mid-spin.
+    ctx.scale(Math.max(HURRICANE.minWidth, Math.abs(sx)) * (sx >= 0 ? 1 : -1) * this.facing, 1);
     ctx.drawImage(img, f.x, f.y, f.w, f.h, -f.ax, -f.ay, f.w, f.h);
     ctx.restore();
     ctx.save(); swirl(true); ctx.restore();
@@ -2893,7 +2894,9 @@ function fitCanvas() {
   const c = $("canvas"), dpr = window.devicePixelRatio || 1;
   const fits = Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H));
   const box = Math.floor(Math.min(WINDOW_BOX[0] * dpr / W, WINDOW_BOX[1] * dpr / H));
-  const k = isFullscreen() ? fits : Math.min(fits, box);
+  // A phone or tablet always uses its whole screen (the 800x600 box is for a desktop window).
+  const phone = document.documentElement.classList.contains("touch");
+  const k = isFullscreen() || phone ? fits : Math.min(fits, box);
   if (k < 1) { c.style.width = c.style.height = ""; return; }  // tiny window: just fit it
   c.style.width = `${k * W / dpr}px`;
   c.style.height = `${k * H / dpr}px`;

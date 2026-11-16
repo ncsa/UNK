@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#0c0c1a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="UNK Fighter">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
 <title>UNK Fighter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
@@ -186,6 +193,51 @@
   .buttons button:first-child { background: var(--red); border-color: #fff; }
   /* The controller's menu highlight (static/gamepad.js). */
   .pad-focus { outline: 3px solid #7dd8ff !important; outline-offset: 2px; }
+  /* ---------- touch screens (static/touch.js) ---------- */
+  html.touch { -webkit-tap-highlight-color: transparent; }
+  #initials-type { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; font-size: 16px; }
+  .touch-only { display: none; }
+  html.touch .touch-only { display: inline; }
+  html.touch-fight, html.touch-fight body { overflow: hidden; overscroll-behavior: none; }
+  html.touch #fight { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #touch { position: fixed; inset: 0; pointer-events: none; z-index: 5; display: none; }
+  html.touch-fight #touch { display: block; }
+  #touch button { pointer-events: auto; font: inherit; color: #fff; border: 2px solid rgba(255, 255, 255, 0.55);
+    background: rgba(27, 27, 51, 0.45); touch-action: none; user-select: none; -webkit-user-select: none; }
+  #touch button.held { background: rgba(255, 210, 63, 0.6); border-color: var(--gold); }
+  /* The pad lives anywhere on the left half (the zone takes the touches); the ring shows where. */
+  #touch .t-stickzone { position: absolute; left: 0; top: 48px; bottom: 0; width: 50%; pointer-events: auto; }
+  #touch .t-stick { position: absolute; left: calc(env(safe-area-inset-left) + 90px); top: calc(100% - 100px);
+    width: 104px; height: 104px; margin: -52px 0 0 -52px; border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(27, 27, 51, 0.3); opacity: 0.5; }
+  #touch .t-stick.active { opacity: 1; }
+  #touch .t-stick i { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px;
+    border-radius: 50%; background: rgba(255, 255, 255, 0.45); }
+  #touch .t-buttons { position: absolute; right: calc(env(safe-area-inset-right) + 12px); bottom: 14px;
+    display: grid; grid-template-columns: 64px 64px; gap: 10px; }
+  #touch .t-buttons button { width: 64px; height: 64px; border-radius: 50%; font-size: 8px; padding: 0; }
+  #touch .t-buttons [data-act="punch"] { background: rgba(232, 52, 58, 0.5); }
+  #touch .t-buttons [data-act="kick"] { background: rgba(63, 169, 255, 0.5); }
+  #touch:not(.street) .t-buttons [data-act="block"] { visibility: hidden; }
+  #touch .t-specials { position: absolute; right: calc(env(safe-area-inset-right) + 12px); bottom: 166px;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 150px; }
+  #touch .t-specials button { font-size: 7px; line-height: 1.4; padding: 6px 8px; border-radius: 6px;
+    border-color: var(--gold); background: rgba(80, 60, 0, 0.5); text-align: right; }
+  #touch .t-specials button.cooling { opacity: 0.35; border-color: rgba(255, 255, 255, 0.4); }
+  #touch .t-pause { position: absolute; top: calc(env(safe-area-inset-top) + 6px); left: 50%; margin-left: -20px;
+    width: 40px; height: 32px; border-radius: 6px; font-size: 10px; padding: 0; }
+  #touch .t-paused { position: absolute; left: 0; right: 0; bottom: 18px; display: none; gap: 10px;
+    justify-content: center; flex-wrap: wrap; }
+  #touch .t-paused button { padding: 14px 16px; font-size: 10px; background: rgba(27, 27, 51, 0.85); }
+  #touch .t-paused [data-act="resume"] { background: var(--red); border-color: #fff; }
+  #touch:not(.practice) .t-paused [data-act="dummy"] { display: none; }
+  #touch.paused .t-paused { display: flex; }
+  #touch.paused .t-stickzone, #touch.paused .t-stick, #touch.paused .t-buttons, #touch.paused .t-specials, #touch.paused .t-pause { display: none; }
+  /* Upright: a card asking to turn the phone (the fight pauses meanwhile). */
+  #rotate { display: none; position: fixed; inset: 0; z-index: 10; background: rgba(12, 12, 26, 0.94);
+    place-items: center; text-align: center; font-size: 12px; line-height: 2; padding: 24px; }
+  #rotate b { display: block; font: 48px/1 system-ui, sans-serif; color: var(--gold); margin-bottom: 16px; }
+  @media (orientation: portrait) { html.touch-fight #rotate { display: grid; } }
 </style>
 </head>
 <body>
@@ -261,6 +313,7 @@
       <table id="scores-side"></table>
       <h2>CONTROLS</h2>
       <div class="controls">
+        <span class="touch-only"><b>TOUCH</b>: left thumb moves (up jumps, down crouches) · buttons on the right punch, kick and jump · tap a special's name to do it · turn the phone sideways<br></span>
         <b><span class="arrow">←</span> <span class="arrow">→</span></b> move · hold back to block<br>
         <b><span class="arrow">↑</span></b> jump · <b><span class="arrow">↓</span></b> crouch · <b><span class="arrow">↓</span></b>+back block low<br>
         <b>J</b> or <b>click</b> punch<br>
@@ -323,5 +376,6 @@
 <script src="/static/game.js"></script>
 <script src="/static/brawl.js"></script>
 <script src="/static/gamepad.js"></script>
+<script src="/static/touch.js"></script>
 </body>
 </html>

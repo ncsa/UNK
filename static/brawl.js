@@ -235,11 +235,11 @@ class Street {
   // mini: the mini boss's character (level.mini_boss names them), and onMini(), called when the
   // hero reaches them: it runs their one-round match and calls resume() if the hero wins.
   // arena: the boss's arena picture, approached at the end of the street (level.boss.view).
-  constructor({ level, base, imgs, kinds, hero, boss, arena = null, mini = null, onMini = null, music, difficulty = "easy", onEnd }) {
+  constructor({ level, base, imgs, kinds, hero, boss, arena = null, mini = null, onMini = null, music: track, difficulty = "easy", onEnd }) {
     this.canvas = $("canvas");
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = false;
-    Object.assign(this, { level, base, imgs, kinds, boss, music, onEnd, onMini });
+    Object.assign(this, { level, base, imgs, kinds, boss, music: track, onEnd, onMini });  // (not "music": that's the player)
     // The street's last screen shows the boss's arena small, in its backdrop. Walking up to the boss,
     // the arena picture grows from there to fill the screen (approach: 0 to 1), and the fight is on it.
     this.arena = arena && level.boss?.view ? { img: arena, view: level.boss.view } : null;
