@@ -10,7 +10,7 @@
 # image, so never on the server): load the keys and create/activate the Python venv for the
 # asset tools. On the server nothing else is needed: the Docker image brings its own Python.
 
-export UNK_HOSTNAME=docent.ncsa.illinois.edu
+export UNK_HOSTNAME=adal.ncsa.illinois.edu
 export ACME_EMAIL=mchenry@illinois.edu
 echo "unk: UNK_HOSTNAME=$UNK_HOSTNAME ACME_EMAIL=$ACME_EMAIL"
 
